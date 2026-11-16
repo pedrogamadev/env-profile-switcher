@@ -48,7 +48,7 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<Node> {
       item.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
       item.tooltip = 'Corrija o .env para voltar a trocar perfis. Clique para ir até a linha.';
       item.command = {
-        command: 'envProfiles.openFile',
+        command: 'semaforoEnv.openFile',
         title: 'Abrir .env',
         arguments: [node.line],
       };
@@ -101,7 +101,7 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<Node> {
     // Só nomes de variáveis, nunca valores.
     item.tooltip = `Variáveis: ${option.keys.join(', ') || '(nenhuma)'}`;
     item.command = {
-      command: 'envProfiles.selectOption',
+      command: 'semaforoEnv.selectOption',
       title: 'Selecionar opção',
       arguments: [group.name, option.name],
     };

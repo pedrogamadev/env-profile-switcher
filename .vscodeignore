@@ -12,3 +12,6 @@ tsconfig.json
 **/.env
 **/.env.*
 *.vsix
+media/*.gif
+media/icon.svg
+media/icon-source.svg
