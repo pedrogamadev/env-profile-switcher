@@ -1,0 +1,139 @@
+{
+  "name": "env-profile-switcher",
+  "displayName": "Env Profiles",
+  "description": "Alterna perfis de banco no .env por grupos independentes, sem comentar linha na mão.",
+  "version": "0.1.0",
+  "publisher": "arabella-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pedrogamadev/env-profile-switcher.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "env",
+    "dotenv",
+    "database",
+    "profiles",
+    "prisma"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "workspaceContains:.env",
+    "workspaceContains:.env.example"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "envProfiles",
+          "title": "Env Profiles",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "envProfiles": [
+        {
+          "id": "envProfiles.view",
+          "name": "Perfis"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "envProfiles.view",
+        "contents": "Nenhum grupo encontrado no .env deste projeto.\nMarque os blocos com # @group, # @option (use @danger nos bancos remotos) e # @end.\n[Abrir .env](command:envProfiles.openFile)\n[Criar .env.example de exemplo](command:envProfiles.createExample)",
+        "when": "envProfiles.fileExists"
+      },
+      {
+        "view": "envProfiles.view",
+        "contents": "Não encontrei o arquivo .env neste projeto.\nO caminho é configurável em envProfiles.file.\n[Criar .env.example de exemplo](command:envProfiles.createExample)",
+        "when": "!envProfiles.fileExists"
+      }
+    ],
+    "commands": [
+      {
+        "command": "envProfiles.selectOption",
+        "title": "Selecionar opção",
+        "category": "Env Profiles"
+      },
+      {
+        "command": "envProfiles.quickSwitch",
+        "title": "Trocar perfil",
+        "category": "Env Profiles",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "envProfiles.refresh",
+        "title": "Atualizar",
+        "category": "Env Profiles",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "envProfiles.openFile",
+        "title": "Abrir .env",
+        "category": "Env Profiles",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "envProfiles.createExample",
+        "title": "Criar .env.example de exemplo",
+        "category": "Env Profiles"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "envProfiles.openFile",
+          "when": "view == envProfiles.view",
+          "group": "navigation@1"
+        },
+        {
+          "command": "envProfiles.refresh",
+          "when": "view == envProfiles.view",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "envProfiles.selectOption",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Env Profiles",
+      "properties": {
+        "envProfiles.file": {
+          "type": "string",
+          "default": ".env",
+          "description": "Caminho do arquivo monitorado, relativo à primeira pasta do workspace."
+        },
+        "envProfiles.showRestartHint": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mostra o lembrete para reiniciar o servidor depois de trocar o perfil."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile && node --test out/test/parser.test.js",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.6.0"
+  }
+}
