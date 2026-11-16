@@ -2,12 +2,12 @@
   "name": "semaforo-env",
   "displayName": "Semáforo Env",
   "description": "Troque de banco no .env com um clique, por grupos independentes, sem comentar linha na mão. Status bar verde, amarela ou vermelha conforme o ambiente ativo.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "arabella-dev",
   "license": "MIT",
   "icon": "media/icon.png",
   "galleryBanner": {
-    "color": "#1E1E1E",
+    "color": "#000000",
     "theme": "dark"
   },
   "repository": {

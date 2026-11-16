@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Ícone novo.
+
 ## 0.2.0
 
 - Novo nome: **Semáforo Env**.
