@@ -1,8 +1,8 @@
 {
   "name": "semaforo-env",
   "displayName": "Semáforo Env",
-  "description": "Troque de banco no .env com um clique, por grupos independentes, sem comentar linha na mão. Status bar verde, amarela ou vermelha conforme o ambiente ativo.",
-  "version": "0.2.1",
+  "description": "Hub do ambiente local: troque bancos e APIs do .env com um clique, suba e reinicie o front e o back de vários sistemas num painel só, e evite rodar migration no lugar errado.",
+  "version": "0.4.0",
   "publisher": "arabella-dev",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -19,7 +19,7 @@
   },
   "homepage": "https://github.com/pedrogamadev/env-profile-switcher#readme",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Other"
@@ -32,6 +32,10 @@
     "profiles",
     "environment",
     "prisma",
+    "monorepo",
+    "microservices",
+    "dev server",
+    "local development",
     "switcher"
   ],
   "main": "./out/src/extension.js",
@@ -54,19 +58,28 @@
         {
           "id": "semaforoEnv.view",
           "name": "Perfis"
+        },
+        {
+          "id": "semaforoEnv.services",
+          "name": "Serviços"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "semaforoEnv.view",
-        "contents": "Nenhum grupo encontrado no .env deste projeto.\nMarque os blocos com # @group, # @option (use @danger nos ambientes remotos) e # @end.\n[Abrir .env](command:semaforoEnv.openFile)\n[Escolher outro arquivo .env](command:semaforoEnv.pickFile)\n[Criar .env.example de exemplo](command:semaforoEnv.createExample)",
+        "contents": "Nenhum grupo encontrado no .env deste projeto.\nO Semáforo pode organizar o arquivo sozinho: ele encontra as variáveis com alternativas (a ativa e as comentadas) e monta os grupos. Você vê o antes e depois antes de aplicar.\n[Organizar .env automaticamente](command:semaforoEnv.organize)\n[Escolher outro arquivo .env](command:semaforoEnv.pickFile)\n[Criar .env.example de exemplo](command:semaforoEnv.createExample)",
         "when": "semaforoEnv.fileExists"
       },
       {
         "view": "semaforoEnv.view",
         "contents": "Não encontrei o .env deste projeto.\nSe ele estiver em uma subpasta (monorepo), escolha qual arquivo controlar.\n[Escolher arquivo .env](command:semaforoEnv.pickFile)\n[Criar .env.example de exemplo](command:semaforoEnv.createExample)",
         "when": "!semaforoEnv.fileExists"
+      },
+      {
+        "view": "semaforoEnv.services",
+        "contents": "Suba o front e o back dos seus sistemas por aqui, cada um com o próprio botão e status.\n[Detectar serviços](command:semaforoEnv.configureServices)\nVai testar vários sistemas juntos (ex.: Controle, SGC e Oráculo)? Crie um workspace com as pastas de todos e abra ele antes.\n[Criar workspace do ecossistema](command:semaforoEnv.createWorkspace)",
+        "when": "!semaforoEnv.hasServices"
       }
     ],
     "commands": [
@@ -103,17 +116,118 @@
         "command": "semaforoEnv.createExample",
         "title": "Criar .env.example de exemplo",
         "category": "Semáforo Env"
+      },
+      {
+        "command": "semaforoEnv.restartServer",
+        "title": "Reiniciar servidor",
+        "category": "Semáforo Env",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "semaforoEnv.startServer",
+        "title": "Iniciar servidor",
+        "category": "Semáforo Env",
+        "icon": "$(play)"
+      },
+      {
+        "command": "semaforoEnv.allLocal",
+        "title": "Voltar tudo pra local",
+        "category": "Semáforo Env",
+        "icon": "$(home)"
+      },
+      {
+        "command": "semaforoEnv.configureRestart",
+        "title": "Configurar reinício automático",
+        "category": "Semáforo Env",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "semaforoEnv.organize",
+        "title": "Organizar .env automaticamente",
+        "category": "Semáforo Env",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "semaforoEnv.groupFromSelection",
+        "title": "Criar grupo com as linhas selecionadas",
+        "category": "Semáforo Env",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "semaforoEnv.configureServices",
+        "title": "Detectar serviços",
+        "category": "Semáforo Env",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "semaforoEnv.createWorkspace",
+        "title": "Criar workspace do ecossistema",
+        "category": "Semáforo Env",
+        "icon": "$(multiple-windows)"
+      },
+      {
+        "command": "semaforoEnv.services.startAll",
+        "title": "Iniciar todos os serviços",
+        "category": "Semáforo Env",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "semaforoEnv.services.stopAll",
+        "title": "Parar todos os serviços",
+        "category": "Semáforo Env",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "semaforoEnv.service.start",
+        "title": "Iniciar",
+        "category": "Semáforo Env",
+        "icon": "$(play)"
+      },
+      {
+        "command": "semaforoEnv.service.stop",
+        "title": "Parar",
+        "category": "Semáforo Env",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "semaforoEnv.service.restart",
+        "title": "Reiniciar",
+        "category": "Semáforo Env",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "semaforoEnv.service.logs",
+        "title": "Ver logs",
+        "category": "Semáforo Env",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "semaforoEnv.system.start",
+        "title": "Iniciar sistema",
+        "category": "Semáforo Env",
+        "icon": "$(play)"
+      },
+      {
+        "command": "semaforoEnv.system.stop",
+        "title": "Parar sistema",
+        "category": "Semáforo Env",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "semaforoEnv.openFile",
+          "command": "semaforoEnv.restartServer",
+          "when": "view == semaforoEnv.view && config.semaforoEnv.restart.mode != off && !semaforoEnv.hasServices",
+          "group": "navigation@0"
+        },
+        {
+          "command": "semaforoEnv.allLocal",
           "when": "view == semaforoEnv.view",
           "group": "navigation@1"
         },
         {
-          "command": "semaforoEnv.pickFile",
+          "command": "semaforoEnv.openFile",
           "when": "view == semaforoEnv.view",
           "group": "navigation@2"
         },
@@ -121,12 +235,134 @@
           "command": "semaforoEnv.refresh",
           "when": "view == semaforoEnv.view",
           "group": "navigation@3"
+        },
+        {
+          "command": "semaforoEnv.organize",
+          "when": "view == semaforoEnv.view",
+          "group": "1_env@1"
+        },
+        {
+          "command": "semaforoEnv.pickFile",
+          "when": "view == semaforoEnv.view",
+          "group": "1_env@2"
+        },
+        {
+          "command": "semaforoEnv.createExample",
+          "when": "view == semaforoEnv.view",
+          "group": "1_env@3"
+        },
+        {
+          "command": "semaforoEnv.configureRestart",
+          "when": "view == semaforoEnv.view",
+          "group": "2_server@1"
+        },
+        {
+          "command": "semaforoEnv.startServer",
+          "when": "view == semaforoEnv.view && !semaforoEnv.hasServices",
+          "group": "2_server@2"
+        },
+        {
+          "command": "semaforoEnv.services.startAll",
+          "when": "view == semaforoEnv.services && semaforoEnv.hasServices",
+          "group": "navigation@1"
+        },
+        {
+          "command": "semaforoEnv.services.stopAll",
+          "when": "view == semaforoEnv.services && semaforoEnv.hasServices",
+          "group": "navigation@2"
+        },
+        {
+          "command": "semaforoEnv.configureServices",
+          "when": "view == semaforoEnv.services",
+          "group": "navigation@3"
+        },
+        {
+          "command": "semaforoEnv.createWorkspace",
+          "when": "view == semaforoEnv.services",
+          "group": "1_ws@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "semaforoEnv.service.start",
+          "when": "view == semaforoEnv.services && viewItem == svcDown",
+          "group": "inline@1"
+        },
+        {
+          "command": "semaforoEnv.service.restart",
+          "when": "view == semaforoEnv.services && viewItem == svcUp",
+          "group": "inline@1"
+        },
+        {
+          "command": "semaforoEnv.service.stop",
+          "when": "view == semaforoEnv.services && viewItem == svcUp",
+          "group": "inline@2"
+        },
+        {
+          "command": "semaforoEnv.service.logs",
+          "when": "view == semaforoEnv.services && viewItem =~ /^svc(Up|Down)$/",
+          "group": "inline@3"
+        },
+        {
+          "command": "semaforoEnv.system.start",
+          "when": "view == semaforoEnv.services && viewItem =~ /^svcSystem/",
+          "group": "inline@1"
+        },
+        {
+          "command": "semaforoEnv.system.stop",
+          "when": "view == semaforoEnv.services && viewItem == svcSystemUp",
+          "group": "inline@2"
+        },
+        {
+          "command": "semaforoEnv.service.start",
+          "when": "view == semaforoEnv.services && viewItem == svcWarning",
+          "group": "inline@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "semaforoEnv.groupFromSelection",
+          "when": "editorHasSelection && resourceFilename =~ /^\\.env/",
+          "group": "1_semaforo@1"
+        },
+        {
+          "command": "semaforoEnv.organize",
+          "when": "resourceFilename =~ /^\\.env/",
+          "group": "1_semaforo@2"
         }
       ],
       "commandPalette": [
         {
           "command": "semaforoEnv.selectOption",
           "when": "false"
+        },
+        {
+          "command": "semaforoEnv.service.start",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.service.stop",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.service.restart",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.service.logs",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.system.start",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.system.stop",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.groupFromSelection",
+          "when": "editorHasSelection && resourceFilename =~ /^\\.env/"
         }
       ]
     },
@@ -136,12 +372,117 @@
         "semaforoEnv.file": {
           "type": "string",
           "default": ".env",
-          "description": "Caminho do arquivo controlado, relativo à primeira pasta do workspace. Se não for definido e não existir .env na raiz, a extensão usa o único .env encontrado em subpastas."
+          "description": "Caminho do .env controlado, relativo à pasta do workspace. Em workspaces com várias pastas, cada sistema tem o seu. Se não for definido e não existir .env na raiz, a extensão usa o único .env encontrado em subpastas.",
+          "order": 1,
+          "scope": "resource"
         },
         "semaforoEnv.showRestartHint": {
           "type": "boolean",
           "default": true,
-          "description": "Mostra o lembrete para reiniciar o servidor depois de trocar o perfil."
+          "description": "Com o reinício automático desligado, mostra o lembrete para reiniciar o servidor depois da troca.",
+          "order": 14
+        },
+        "semaforoEnv.restart.mode": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "terminal",
+            "task",
+            "debug"
+          ],
+          "enumDescriptions": [
+            "Não reinicia. Só mostra o lembrete.",
+            "Reinicia o terminal onde o servidor está rodando (o seu). Se não encontrar, abre um terminal visível \"Semáforo · servidor\".",
+            "Reinicia uma task do VS Code (semaforoEnv.restart.task).",
+            "Reinicia a sessão de debug ativa (F5)."
+          ],
+          "markdownDescription": "Reinício simples, para projetos com um servidor só. Se o painel **Serviços** estiver configurado, ele tem prioridade. Use **Semáforo Env: Configurar reinício automático** para preencher pelo assistente.",
+          "order": 10
+        },
+        "semaforoEnv.restart.command": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Comando que inicia o servidor, ex.: `npm run start:dev`. Também é usado para reconhecer o terminal onde ele já está rodando.",
+          "order": 11
+        },
+        "semaforoEnv.restart.cwd": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Pasta onde rodar o comando quando a extensão precisar abrir um terminal novo, relativa ao projeto. Ex.: `sgc-api`.",
+          "order": 12
+        },
+        "semaforoEnv.restart.task": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Nome da task reiniciada no modo `task`.",
+          "order": 13
+        },
+        "semaforoEnv.guard.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Freio de mão: cancela comandos perigosos no terminal integrado (ex.: `prisma migrate dev`) quando uma opção `@danger` está ativa, e pede confirmação.",
+          "order": 20
+        },
+        "semaforoEnv.guard.patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "prisma\\s+migrate\\s+(dev|reset|deploy)",
+            "prisma\\s+db\\s+(push|seed)",
+            "typeorm\\b.*\\bmigration:run",
+            "sequelize\\b.*\\bdb:migrate",
+            "knex\\b.*\\bmigrate:latest"
+          ],
+          "markdownDescription": "Expressões regulares dos comandos barrados pelo freio de mão.",
+          "order": 21
+        },
+        "semaforoEnv.warnOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Avisa ao abrir o projeto se alguma opção `@danger` estiver ativa, com um botão para voltar tudo pra local.",
+          "order": 30
+        },
+        "semaforoEnv.services": {
+          "type": "array",
+          "default": [],
+          "order": 5,
+          "markdownDescription": "Serviços do painel **Serviços**. Use **Semáforo Env: Detectar serviços** para preencher pelo assistente. Quando um `.env` muda, os serviços rodando na mesma pasta desse `.env` reiniciam sozinhos.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "command"
+            ],
+            "properties": {
+              "system": {
+                "type": "string",
+                "description": "Sistema (ex.: SGC). Agrupa os serviços no painel."
+              },
+              "name": {
+                "type": "string",
+                "description": "Nome curto (ex.: back, front)."
+              },
+              "folder": {
+                "type": "string",
+                "description": "Nome da pasta do workspace, em workspaces com várias pastas."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Pasta onde rodar o comando, relativa à pasta do workspace (ex.: sgc-api)."
+              },
+              "command": {
+                "type": "string",
+                "description": "Comando que inicia o serviço (ex.: npm run start:dev)."
+              },
+              "port": {
+                "type": "number",
+                "description": "Porta local. Usada para saber quando o serviço está pronto e para avisar dependências paradas."
+              }
+            }
+          }
         }
       }
     }
@@ -149,13 +490,13 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "test": "npm run compile && node --test out/test/parser.test.js",
+    "test": "npm run compile && node --test out/test/parser.test.js out/test/logic.test.js out/test/organize.test.js",
     "package": "vsce package",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/vscode": "1.90.0",
+    "@types/vscode": "1.93.0",
     "@vscode/vsce": "^3.2.0",
     "typescript": "^5.6.0"
   }
