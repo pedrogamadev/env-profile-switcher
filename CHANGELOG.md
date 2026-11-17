@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+- **Corrigido:** escolher o comando em "Qual comando inicia o servidor?" podia falhar com `Unable to write to Workspace Settings because semaforoEnv.restart.command is not a registered configuration`. Isso acontecia, por exemplo, logo depois de a extensão se atualizar sozinha sem recarregar a janela. O reinício simples não grava mais nada em `settings.json` nem no `.code-workspace`.
+- O comando de inicialização agora fica salvo **por pasta de projeto** (a pasta do `package.json` escolhido) no estado do workspace. `sgc-api` e `sgc-app` guardam cada um o seu, e trocar o `.env` de uma pasta reinicia só o servidor dela, num terminal próprio (`Semáforo · sgc-api`).
+- Os valores antigos de `semaforoEnv.restart.*` são copiados uma vez para o novo formato. As chaves continuam no seu `settings.json` (nada é apagado), mas não são mais lidas e aparecem como obsoletas.
+- Novo comando **Redefinir comando de inicialização**, que apaga o comando salvo da pasta que você escolher.
+- O script `start` aparece como `npm start` (os demais continuam `npm run <script>`). O gerenciador de pacotes vem do lockfile da pasta ou, se ela não tiver um, da pasta acima (monorepo).
+- Toda gravação em configurações mostra um aviso em português quando falha, em vez de um erro solto.
+
 ## 0.4.0
 
 O Semáforo virou um hub do ambiente local.

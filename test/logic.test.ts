@@ -114,6 +114,37 @@ test('gerenciador de pacotes e scripts de dev', () => {
   );
 });
 
+import { hasLockfile, packageScripts } from '../src/logic';
+
+test('script "start" vira "npm start"; os demais continuam "npm run <script>"', () => {
+  assert.equal(scriptCommand('npm', 'start'), 'npm start');
+  assert.equal(scriptCommand('npm', 'start:dev'), 'npm run start:dev');
+  assert.equal(scriptCommand('npm', 'dev'), 'npm run dev');
+  assert.equal(scriptCommand('pnpm', 'start'), 'pnpm start');
+  assert.equal(scriptCommand('yarn', 'start'), 'yarn start');
+  assert.equal(scriptCommand('bun', 'start'), 'bun run start');
+  assert.equal(detectPackageManager(['package.json']), 'npm');
+});
+
+test('terminal com "npm run start" é reconhecido como "npm start", sem confundir com start:dev', () => {
+  assert.ok(commandMatches('npm run start', 'npm start'));
+  assert.ok(commandMatches('npm start', 'npm run start'));
+  assert.ok(commandMatches('npm   start --verbose', 'npm start'));
+  assert.equal(commandMatches('npm run start:dev', 'npm start'), false);
+  assert.equal(commandMatches('npm run start-prod', 'npm start'), false);
+  assert.ok(commandMatches('npm run start:dev', 'npm run start:dev'));
+});
+
+test('lockfile e scripts do package.json', () => {
+  assert.ok(hasLockfile(['package.json', 'yarn.lock']));
+  assert.ok(hasLockfile(['package-lock.json']));
+  assert.equal(hasLockfile(['package.json', 'tsconfig.json']), false);
+  assert.deepEqual(packageScripts({ scripts: { dev: 'vite', bad: 1, start: 'node .' } }), { dev: 'vite', start: 'node .' });
+  assert.deepEqual(packageScripts({ name: 'x' }), {});
+  assert.deepEqual(packageScripts(null), {});
+  assert.deepEqual(packageScripts({ scripts: 'nope' }), {});
+});
+
 import { normalizeServices, serviceId, serviceUsesEnvDir, classifyPackage, guessPort, localPortRefs } from '../src/logic';
 
 test('serviços: normaliza a configuração e ignora entradas inválidas', () => {

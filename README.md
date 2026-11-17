@@ -115,17 +115,16 @@ Cada sistema passa a ter o **seu** `.env` no painel **Perfis**, e a status bar r
 
 Sem o painel de serviços configurado, ainda dá pra reiniciar o servidor sozinho: **Ctrl+Shift+P → Semáforo Env: Configurar reinício automático**. O Semáforo reinicia o terminal onde o servidor está rodando (o seu) ou abre um terminal visível. Também funciona com tasks do VS Code e com a sessão de debug (F5).
 
+O comando escolhido fica salvo **por pasta de projeto** (a pasta do `package.json`), no estado do workspace, e não no `settings.json`. Num projeto com `sgc-api` e `sgc-app`, cada um guarda o seu, e trocar o `.env` de `sgc-api` reinicia só o servidor de `sgc-api`. Para esquecer um comando salvo: **Semáforo Env: Redefinir comando de inicialização**.
+
 ## Configurações
 
 | Setting | Padrão | Descrição |
 |---|---|---|
 | `semaforoEnv.file` | `.env` | `.env` controlado, relativo à pasta. Em workspaces de várias pastas, cada sistema tem o seu |
 | `semaforoEnv.services` | `[]` | Serviços do painel: `system`, `name`, `folder`, `cwd`, `command`, `port` |
-| `semaforoEnv.restart.mode` | `off` | Reinício simples: `terminal`, `task`, `debug` ou `off` |
-| `semaforoEnv.restart.command` | | Comando do servidor no reinício simples |
-| `semaforoEnv.restart.cwd` | | Pasta usada quando é preciso abrir um terminal novo |
-| `semaforoEnv.restart.task` | | Task usada no modo `task` |
 | `semaforoEnv.showRestartHint` | `true` | Lembrete pra reiniciar quando nada está configurado |
+| `semaforoEnv.restart.*` | | **Obsoletas desde a 0.4.1.** O reinício simples agora fica no estado do workspace. Valores antigos são migrados uma vez e depois ignorados |
 | `semaforoEnv.guard.enabled` | `true` | Liga o freio de mão |
 | `semaforoEnv.guard.patterns` | migrations comuns | Expressões regulares dos comandos barrados |
 | `semaforoEnv.warnOnStartup` | `true` | Aviso ao abrir com opção remota ativa |

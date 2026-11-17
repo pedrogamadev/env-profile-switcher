@@ -1,13 +1,17 @@
 import * as vscode from 'vscode';
 import { commandMatches } from './logic';
+import { RestartMode, normalizeFolderPath } from './state/restartCommandStore';
 
-export type RestartMode = 'off' | 'terminal' | 'task' | 'debug';
+export type { RestartMode };
 
 export interface RestartConfig {
   mode: RestartMode;
   command: string;
+  /** Pasta absoluta onde o comando roda (modo terminal). */
   cwd: string;
   task: string;
+  /** Nome curto da pasta do projeto (ex.: sgc-api), usado no terminal e nas mensagens. */
+  label?: string;
 }
 
 interface Tracked {
@@ -34,15 +38,15 @@ export class ServerManager implements vscode.Disposable {
   private readonly waiters = new Map<vscode.TerminalShellExecution, () => void>();
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(
-    private readonly config: () => RestartConfig,
-    private readonly root: () => vscode.Uri | undefined,
-  ) {
+  constructor(private readonly config: () => RestartConfig) {
     this.disposables.push(
       vscode.window.onDidStartTerminalShellExecution((e) => {
         const cfg = this.config();
         if (cfg.mode !== 'terminal' || !cfg.command) return;
         if (!commandMatches(e.execution.commandLine.value, cfg.command)) return;
+        // Vários projetos podem usar o mesmo comando (ex.: npm run dev): só adota o da pasta certa.
+        const ranIn = e.execution.cwd ?? e.terminal.shellIntegration?.cwd;
+        if (cfg.cwd && ranIn && normalizeFolderPath(ranIn.fsPath) !== normalizeFolderPath(cfg.cwd)) return;
         this.tracked = {
           terminal: e.terminal,
           commandLine: e.execution.commandLine.value.trim() || cfg.command,
@@ -70,7 +74,8 @@ export class ServerManager implements vscode.Disposable {
     const cfg = this.config();
     switch (cfg.mode) {
       case 'terminal':
-        return cfg.command ? `reinicia "${cfg.command}"` : 'terminal (comando não configurado)';
+        if (!cfg.command) return 'terminal (comando não configurado)';
+        return cfg.label ? `reinicia "${cfg.command}" em ${cfg.label}` : `reinicia "${cfg.command}"`;
       case 'task':
         return cfg.task ? `reinicia a task "${cfg.task}"` : 'task (nome não configurado)';
       case 'debug':
@@ -142,9 +147,11 @@ export class ServerManager implements vscode.Disposable {
               description: 'parar o que estiver rodando e iniciar o servidor aqui',
               term,
             })),
-            { label: `$(add) Terminal novo`, description: MANAGED_NAME, term: undefined },
+            { label: `$(add) Terminal novo`, description: this.terminalName(cfg), term: undefined },
           ],
-          { placeHolder: `Em qual terminal o servidor está rodando? (${cfg.command})` },
+          {
+            placeHolder: `Em qual terminal o servidor está rodando? (${cfg.label ? `${cfg.label}: ` : ''}${cfg.command})`,
+          },
         );
         if (!pick) return false;
         if (pick.term) {
@@ -225,20 +232,19 @@ export class ServerManager implements vscode.Disposable {
     });
   }
 
+  /** Um terminal próprio por pasta de projeto. */
+  private terminalName(cfg: RestartConfig): string {
+    return cfg.label ? `Semáforo · ${cfg.label}` : MANAGED_NAME;
+  }
+
   private async startManaged(cfg: RestartConfig): Promise<void> {
-    const root = this.root();
-    const cwd =
-      root && cfg.cwd
-        ? vscode.Uri.joinPath(root, ...cfg.cwd.split(/[\\/]+/).filter(Boolean))
-        : root;
-    const existing = vscode.window.terminals.find(
-      (t) => t.name === MANAGED_NAME && t.exitStatus === undefined,
-    );
+    const name = this.terminalName(cfg);
+    const existing = vscode.window.terminals.find((t) => t.name === name && t.exitStatus === undefined);
     const terminal =
       existing ??
       vscode.window.createTerminal({
-        name: MANAGED_NAME,
-        cwd,
+        name,
+        cwd: cfg.cwd ? vscode.Uri.file(cfg.cwd) : undefined,
         iconPath: new vscode.ThemeIcon('server-process'),
       });
     await this.run(terminal, cfg.command);

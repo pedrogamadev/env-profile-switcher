@@ -2,7 +2,7 @@
   "name": "semaforo-env",
   "displayName": "Semáforo Env",
   "description": "Hub do ambiente local: troque bancos e APIs do .env com um clique, suba e reinicie o front e o back de vários sistemas num painel só, e evite rodar migration no lugar errado.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "arabella-dev",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -142,6 +142,12 @@
         "icon": "$(gear)"
       },
       {
+        "command": "semaforoEnv.resetRestartCommand",
+        "title": "Redefinir comando de inicialização",
+        "category": "Semáforo Env",
+        "icon": "$(discard)"
+      },
+      {
         "command": "semaforoEnv.organize",
         "title": "Organizar .env automaticamente",
         "category": "Semáforo Env",
@@ -255,6 +261,11 @@
           "command": "semaforoEnv.configureRestart",
           "when": "view == semaforoEnv.view",
           "group": "2_server@1"
+        },
+        {
+          "command": "semaforoEnv.resetRestartCommand",
+          "when": "view == semaforoEnv.view && !semaforoEnv.hasServices",
+          "group": "2_server@3"
         },
         {
           "command": "semaforoEnv.startServer",
@@ -398,25 +409,29 @@
             "Reinicia a sessão de debug ativa (F5)."
           ],
           "markdownDescription": "Reinício simples, para projetos com um servidor só. Se o painel **Serviços** estiver configurado, ele tem prioridade. Use **Semáforo Env: Configurar reinício automático** para preencher pelo assistente.",
-          "order": 10
+          "order": 10,
+          "markdownDeprecationMessage": "Obsoleto desde a 0.4.1. O reinício agora fica salvo por pasta de projeto no estado do workspace, fora do settings.json. Valores antigos são migrados uma vez ao abrir o projeto. Use **Semáforo Env: Configurar reinício automático** e **Semáforo Env: Redefinir comando de inicialização**."
         },
         "semaforoEnv.restart.command": {
           "type": "string",
           "default": "",
           "markdownDescription": "Comando que inicia o servidor, ex.: `npm run start:dev`. Também é usado para reconhecer o terminal onde ele já está rodando.",
-          "order": 11
+          "order": 11,
+          "markdownDeprecationMessage": "Obsoleto desde a 0.4.1. O reinício agora fica salvo por pasta de projeto no estado do workspace, fora do settings.json. Valores antigos são migrados uma vez ao abrir o projeto. Use **Semáforo Env: Configurar reinício automático** e **Semáforo Env: Redefinir comando de inicialização**."
         },
         "semaforoEnv.restart.cwd": {
           "type": "string",
           "default": "",
           "markdownDescription": "Pasta onde rodar o comando quando a extensão precisar abrir um terminal novo, relativa ao projeto. Ex.: `sgc-api`.",
-          "order": 12
+          "order": 12,
+          "markdownDeprecationMessage": "Obsoleto desde a 0.4.1. O reinício agora fica salvo por pasta de projeto no estado do workspace, fora do settings.json. Valores antigos são migrados uma vez ao abrir o projeto. Use **Semáforo Env: Configurar reinício automático** e **Semáforo Env: Redefinir comando de inicialização**."
         },
         "semaforoEnv.restart.task": {
           "type": "string",
           "default": "",
           "markdownDescription": "Nome da task reiniciada no modo `task`.",
-          "order": 13
+          "order": 13,
+          "markdownDeprecationMessage": "Obsoleto desde a 0.4.1. O reinício agora fica salvo por pasta de projeto no estado do workspace, fora do settings.json. Valores antigos são migrados uma vez ao abrir o projeto. Use **Semáforo Env: Configurar reinício automático** e **Semáforo Env: Redefinir comando de inicialização**."
         },
         "semaforoEnv.guard.enabled": {
           "type": "boolean",
@@ -490,7 +505,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "test": "npm run compile && node --test out/test/parser.test.js out/test/logic.test.js out/test/organize.test.js",
+    "test": "npm run compile && node --test out/test/parser.test.js out/test/logic.test.js out/test/organize.test.js out/test/restartCommandStore.test.js",
     "package": "vsce package",
     "vscode:prepublish": "npm run compile"
   },

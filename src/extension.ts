@@ -5,14 +5,17 @@ import { EnvTreeProvider, EnvView, Light } from './treeProvider';
 import { EXAMPLE_ENV } from './example';
 import {
   DEFAULT_GUARD_PATTERNS,
+  PackageManager,
   ServiceDef,
   activeDangers,
   classifyPackage,
   detectPackageManager,
   guessPort,
+  hasLockfile,
   localPortRefs,
   matchesGuard,
   normalizeServices,
+  packageScripts,
   planAllLocal,
   rankDevScripts,
   scriptCommand,
@@ -21,6 +24,12 @@ import { Proposal, describeProposal, proposeOrganization } from './organize';
 import { RestartConfig, RestartMode, ServerManager } from './server';
 import { ServiceManager } from './services';
 import { DependencyWarning, ServicesTreeProvider, SvcNode } from './servicesTree';
+import {
+  LegacyRestartSettings,
+  RestartCommandStore,
+  StoredRestartCommand,
+  normalizeFolderPath,
+} from './state/restartCommandStore';
 
 const CONFIG = 'semaforoEnv';
 const NAME = 'Semáforo Env';
@@ -40,7 +49,11 @@ interface EnvContext {
 let tree: EnvTreeProvider;
 let servicesTree: ServicesTreeProvider;
 let status: vscode.StatusBarItem;
-let server: ServerManager;
+let restartStore: RestartCommandStore;
+/** Reinício nos modos task e debug, que valem para o workspace inteiro. */
+let workspaceServer: ServerManager;
+/** Reinício no modo terminal: um por pasta de projeto, pela chave normalizada da pasta. */
+const folderServers = new Map<string, ServerManager>();
 let services: ServiceManager;
 let watchers: vscode.FileSystemWatcher[] = [];
 const contexts = new Map<string, EnvContext>();
@@ -67,14 +80,112 @@ function fileIsExplicit(folder: vscode.WorkspaceFolder): boolean {
   return !!(info?.workspaceFolderValue || info?.workspaceValue || info?.globalValue);
 }
 
-function restartConfig(): RestartConfig {
-  const c = conf();
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Grava uma configuração sem deixar o erro do VS Code escapar como exceção.
+ * Retorna false (e avisa) se não conseguiu.
+ */
+async function writeSetting(
+  key: string,
+  value: unknown,
+  target: vscode.ConfigurationTarget,
+  scope: vscode.Uri | undefined,
+  what: string,
+): Promise<boolean> {
+  try {
+    await conf(scope).update(key, value, target);
+    return true;
+  } catch (e) {
+    void vscode.window.showWarningMessage(
+      `${NAME}: não consegui salvar ${what} nas configurações (${CONFIG}.${key}). ${errorText(e)}`,
+    );
+    return false;
+  }
+}
+
+// ───────────────────────── Reinício simples: estado ─────────────────────────
+
+function restartMode(): RestartMode {
+  return restartStore.getMode();
+}
+
+/**
+ * Caminho relativo (com "/") de um caminho de disco dentro da pasta do workspace.
+ * Compara por fsPath: Uri.file() devolve "c:" e a pasta aberta pode estar como "C:".
+ */
+function relFsPath(folder: vscode.WorkspaceFolder, fsPath: string): string {
+  return path.relative(folder.uri.fsPath, fsPath).split(path.sep).join('/');
+}
+
+/** Nome curto de uma pasta de projeto: caminho relativo à pasta do workspace (ex.: sgc-api). */
+function folderLabel(folderPath: string): string {
+  const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(folderPath));
+  if (!folder) return path.basename(folderPath) || folderPath;
+  const rel = relFsPath(folder, folderPath);
+  if (!rel) return folder.name;
+  return folders().length > 1 ? `${folder.name}/${rel}` : rel;
+}
+
+function workspaceRestartConfig(): RestartConfig {
+  const mode = restartMode();
   return {
-    mode: c.get<RestartMode>('restart.mode', 'off'),
-    command: (c.get<string>('restart.command', '') || '').trim(),
-    cwd: (c.get<string>('restart.cwd', '') || '').trim(),
-    task: (c.get<string>('restart.task', '') || '').trim(),
+    mode: mode === 'task' || mode === 'debug' ? mode : 'off',
+    command: '',
+    cwd: '',
+    task: restartStore.getTask(),
   };
+}
+
+/** O ServerManager do modo terminal para uma pasta de projeto (criado na primeira vez). */
+function folderServer(folderPath: string): ServerManager {
+  const key = normalizeFolderPath(folderPath);
+  let manager = folderServers.get(key);
+  if (!manager) {
+    manager = new ServerManager(() => {
+      const saved = restartStore.get(key);
+      return {
+        mode: saved ? 'terminal' : 'off',
+        command: saved?.command ?? '',
+        cwd: saved?.cwd ?? '',
+        task: '',
+        label: saved ? folderLabel(saved.cwd) : undefined,
+      };
+    });
+    folderServers.set(key, manager);
+  }
+  return manager;
+}
+
+function dropFolderServer(folderPath: string): void {
+  const key = normalizeFolderPath(folderPath);
+  folderServers.get(key)?.dispose();
+  folderServers.delete(key);
+}
+
+/** Lê uma única vez os antigos semaforoEnv.restart.* e passa para o workspaceState. */
+async function migrateRestartSettings(): Promise<void> {
+  const base = folders()[0];
+  if (!base) return;
+  const c = conf();
+  const legacy = (key: string): unknown => {
+    const info = c.inspect<unknown>(`restart.${key}`);
+    return info?.workspaceValue ?? info?.globalValue;
+  };
+  const values: LegacyRestartSettings = {
+    mode: legacy('mode'),
+    command: legacy('command'),
+    cwd: legacy('cwd'),
+    task: legacy('task'),
+  };
+  if (await restartStore.migrateLegacy(values, base.uri.fsPath)) {
+    void vscode.window.showInformationMessage(
+      `${NAME}: o reinício do servidor agora fica salvo por pasta de projeto, fora do settings.json. ` +
+        `Copiei o que estava em ${CONFIG}.restart.*; essas chaves não são mais lidas e podem ser apagadas quando quiser.`,
+    );
+  }
 }
 
 function serviceDefs(): ServiceDef[] {
@@ -357,21 +468,23 @@ async function afterSwitch(ctx: EnvContext, summary: string): Promise<void> {
       4000,
     );
   } else {
-    const cfg = restartConfig();
-    if (cfg.mode !== 'off') {
-      if (await server.restart()) {
+    const mode = restartMode();
+    if (mode === 'terminal') {
+      await restartFoldersForEnv(envDir, summary);
+    } else if (mode !== 'off') {
+      if (await workspaceServer.restart()) {
         vscode.window.setStatusBarMessage(`$(sync) ${summary}. Servidor reiniciado.`, 4000);
       } else {
         const choice = await vscode.window.showWarningMessage(
-          `${summary}, mas não consegui reiniciar o servidor (${server.describe()}).`,
+          `${summary}, mas não consegui reiniciar o servidor (${workspaceServer.describe()}).`,
           'Configurar reinício',
         );
-        if (choice) await configureRestart();
+        if (choice) await configureRestart(envDir);
       }
     } else if (conf().get<boolean>('showRestartHint', true)) {
       const actions = services.list().length ? ['Configurar serviços'] : ['Reiniciar sozinho da próxima vez', 'Configurar serviços'];
       const choice = await vscode.window.showInformationMessage(`${summary}. Reinicie o servidor para aplicar.`, ...actions);
-      if (choice === 'Reiniciar sozinho da próxima vez') await configureRestart();
+      if (choice === 'Reiniciar sozinho da próxima vez') await configureRestart(envDir);
       else if (choice === 'Configurar serviços') await configureServices();
     }
   }
@@ -621,8 +734,14 @@ async function pickFile(): Promise<void> {
     { placeHolder: 'Qual arquivo o Semáforo deve controlar?' },
   );
   if (!picked) return;
-  const target = folders().length > 1 ? vscode.ConfigurationTarget.WorkspaceFolder : vscode.ConfigurationTarget.Workspace;
-  await conf(picked.c.folder.uri).update('file', relToFolder(picked.c.folder, picked.c.uri), target);
+  // semaforoEnv.file tem scope "resource": grava na pasta dona do arquivo (numa pasta única, é o mesmo .vscode/settings.json).
+  await writeSetting(
+    'file',
+    relToFolder(picked.c.folder, picked.c.uri),
+    vscode.ConfigurationTarget.WorkspaceFolder,
+    picked.c.folder.uri,
+    `a escolha do arquivo .env de ${picked.c.folder.name}`,
+  );
 }
 
 async function openFile(line?: unknown, key?: unknown): Promise<void> {
@@ -686,7 +805,7 @@ async function configureServices(): Promise<void> {
     if (!best) continue;
     const dir = vscode.Uri.joinPath(uri, '..');
     const entries = await vscode.workspace.fs.readDirectory(dir);
-    const pm = detectPackageManager(entries.map(([n]) => n));
+    const pm = await packageManagerFor(dir, folder);
     const kind = classifyPackage(pkg);
     const envText = entries.some(([n]) => n === '.env') ? await readText(vscode.Uri.joinPath(dir, '.env')) : undefined;
     const cwd = relToFolder(folder, dir);
@@ -740,7 +859,8 @@ async function configureServices(): Promise<void> {
     const { folder, ...rest } = p.def;
     return folder ? p.def : rest;
   });
-  await conf().update('services', defs, vscode.ConfigurationTarget.Workspace);
+  // semaforoEnv.services descreve serviços de todas as pastas (campo "folder"), então vive no nível do workspace.
+  if (!(await writeSetting('services', defs, vscode.ConfigurationTarget.Workspace, undefined, 'os serviços detectados'))) return;
   const choice = await vscode.window.showInformationMessage(
     `${NAME}: ${defs.length} serviço(s) configurado(s). Quando você trocar um .env, os serviços que leem esse arquivo reiniciam sozinhos.`,
     'Iniciar todos agora',
@@ -779,20 +899,164 @@ async function createWorkspace(): Promise<void> {
   if (choice) await vscode.commands.executeCommand('vscode.openFolder', target);
 }
 
-// ───────────────────────── Reinício simples (modo v0.3) ─────────────────────────
+// ───────────────────────── Reinício simples ─────────────────────────
+// Tudo fica no workspaceState (src/state/restartCommandStore.ts); nada aqui grava em settings.json.
 
-async function configureRestart(): Promise<void> {
-  const folder = folders()[0];
-  if (!folder) return;
-  const cfg = conf();
-  const target = vscode.ConfigurationTarget.Workspace;
+/** Gerenciador pelo lockfile da pasta. Sem lockfile, sobe até a raiz da pasta do workspace (monorepo). */
+async function packageManagerFor(dir: vscode.Uri, folder: vscode.WorkspaceFolder): Promise<PackageManager> {
+  const root = normalizeFolderPath(folder.uri.fsPath);
+  let current = dir;
+  for (;;) {
+    let names: string[] = [];
+    try {
+      names = (await vscode.workspace.fs.readDirectory(current)).map(([name]) => name);
+    } catch {
+      // pasta ilegível: continua subindo
+    }
+    if (hasLockfile(names)) return detectPackageManager(names);
+    const parent = vscode.Uri.joinPath(current, '..');
+    if (normalizeFolderPath(current.fsPath) === root || parent.path === current.path) return 'npm';
+    current = parent;
+  }
+}
+
+interface StartCommandItem extends vscode.QuickPickItem {
+  command: string;
+  /** Pasta absoluta do package.json (vazio no item "Digitar outro comando"). */
+  folder: string;
+}
+
+/** QuickPick "Qual comando inicia o servidor?". Devolve o comando e a pasta do projeto. */
+async function pickStartCommand(prefer?: vscode.Uri): Promise<{ command: string; folder: string } | undefined> {
+  const pkgs = (await vscode.workspace.findFiles('**/package.json', SEARCH_EXCLUDE, 30)).sort((a, b) =>
+    a.path.localeCompare(b.path),
+  );
+  const items: StartCommandItem[] = [];
+  for (const uri of pkgs) {
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!folder) continue;
+    let scripts: Record<string, string>;
+    try {
+      const raw: unknown = JSON.parse(new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri)));
+      scripts = packageScripts(raw);
+    } catch {
+      continue; // package.json inválido: ignora
+    }
+    const dir = vscode.Uri.joinPath(uri, '..');
+    const pm = await packageManagerFor(dir, folder);
+    const saved = restartStore.get(dir.fsPath)?.command;
+    for (const name of rankDevScripts(scripts).slice(0, 6)) {
+      const command = scriptCommand(pm, name);
+      items.push({
+        label: command,
+        description: [folderLabel(dir.fsPath), command === saved ? 'salvo' : ''].filter(Boolean).join(' · '),
+        detail: scripts[name],
+        command,
+        folder: dir.fsPath,
+      });
+    }
+  }
+
+  // Os projetos da pasta do .env que acabou de mudar aparecem primeiro.
+  if (prefer) {
+    const key = normalizeFolderPath(prefer.fsPath);
+    const rank = (item: StartCommandItem): number => {
+      const dir = normalizeFolderPath(item.folder);
+      return dir === key ? 0 : dir.startsWith(key + path.sep) ? 1 : 2;
+    };
+    items.sort((a, b) => rank(a) - rank(b));
+  }
+
+  items.push({ label: '$(edit) Digitar outro comando...', command: '', folder: '' });
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Qual comando inicia o servidor?',
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  if (!picked) return undefined;
+  if (picked.command) return { command: picked.command, folder: picked.folder };
+
+  const command = (
+    await vscode.window.showInputBox({ prompt: 'Comando que inicia o servidor', placeHolder: 'npm run start:dev' })
+  )?.trim();
+  if (!command) return undefined;
+  const preferFolder = prefer ? vscode.workspace.getWorkspaceFolder(prefer) : undefined;
+  const base = preferFolder ?? folders()[0];
+  if (!base) return undefined;
+  const rel = await vscode.window.showInputBox({
+    prompt: `Pasta onde rodar, relativa a ${base.name} (vazio = raiz)`,
+    placeHolder: 'sgc-api',
+    value: preferFolder && prefer ? relFsPath(preferFolder, prefer.fsPath) : '',
+  });
+  if (rel === undefined) return undefined;
+  return { command, folder: joinRel(base.uri, rel.trim()).fsPath };
+}
+
+/** Escolhe o comando de inicialização e salva para a pasta do projeto escolhido. */
+async function chooseStartCommand(prefer?: vscode.Uri): Promise<void> {
+  const chosen = await pickStartCommand(prefer);
+  if (!chosen) return;
+  const previous = restartStore.get(chosen.folder);
+  // Outro comando: o terminal que estava sendo acompanhado não serve mais.
+  if (previous && previous.command !== chosen.command) dropFolderServer(chosen.folder);
+  await restartStore.set(chosen.folder, { command: chosen.command, cwd: chosen.folder });
+  await restartStore.setMode('terminal');
+
+  const choice = await vscode.window.showInformationMessage(
+    `${NAME}: pronto. Quando o .env de ${folderLabel(chosen.folder)} mudar, o Semáforo reinicia "${chosen.command}".`,
+    'Iniciar servidor agora',
+  );
+  if (choice) await folderServer(chosen.folder).start();
+}
+
+/** Modo terminal: reinicia os comandos salvos para a pasta do .env que mudou. */
+async function restartFoldersForEnv(envDir: vscode.Uri | undefined, summary: string): Promise<void> {
+  const targets = envDir ? restartStore.forEnvDir(envDir.fsPath) : [];
+  if (targets.length === 0) {
+    const where = envDir ? folderLabel(envDir.fsPath) : 'este projeto';
+    const choice = await vscode.window.showWarningMessage(
+      `${summary}. Ainda não há comando de inicialização salvo para ${where}.`,
+      'Escolher comando',
+    );
+    if (choice) await chooseStartCommand(envDir);
+    return;
+  }
+
+  const done: string[] = [];
+  const failed: string[] = [];
+  for (const t of targets) ((await folderServer(t.folder).restart()) ? done : failed).push(folderLabel(t.cwd));
+  if (done.length > 0) vscode.window.setStatusBarMessage(`$(sync) ${summary}. Reiniciado: ${done.join(', ')}`, 4000);
+  if (failed.length > 0) {
+    const choice = await vscode.window.showWarningMessage(
+      `${summary}, mas não consegui reiniciar o servidor de ${failed.join(', ')}.`,
+      'Configurar reinício',
+    );
+    if (choice) await configureRestart(envDir);
+  }
+}
+
+/** Escolhe uma das pastas com comando salvo. Com uma só, devolve direto (a menos que always). */
+async function pickSavedCommand(placeHolder: string, always = false): Promise<StoredRestartCommand | undefined> {
+  const saved = restartStore.list();
+  if (saved.length === 0 || (saved.length === 1 && !always)) return saved[0];
+  const picked = await vscode.window.showQuickPick(
+    saved.map((entry) => ({ label: folderLabel(entry.cwd), description: entry.command, detail: entry.cwd, entry })),
+    { placeHolder },
+  );
+  return picked?.entry;
+}
+
+async function configureRestart(preferDir?: unknown): Promise<void> {
+  if (folders().length === 0) return;
+  const prefer = preferDir instanceof vscode.Uri ? preferDir : undefined;
 
   const mode = await vscode.window.showQuickPick(
     [
       {
         label: '$(terminal) Terminal',
         description: 'recomendado',
-        detail: 'Reinicia o terminal onde o servidor está rodando. Se não houver, abre um terminal visível.',
+        detail:
+          'Reinicia o terminal onde o servidor está rodando. Se não houver, abre um terminal visível. O comando fica salvo por pasta de projeto.',
         value: 'terminal' as RestartMode,
       },
       { label: '$(tasklist) Task do VS Code', detail: 'Reinicia uma task do tasks.json.', value: 'task' as RestartMode },
@@ -804,48 +1068,75 @@ async function configureRestart(): Promise<void> {
   if (!mode) return;
 
   if (mode.value === 'terminal') {
-    const pkgs = await vscode.workspace.findFiles('**/package.json', SEARCH_EXCLUDE, 30);
-    const items: { label: string; description: string; detail?: string; command: string; cwd: string }[] = [];
-    for (const uri of pkgs) {
-      try {
-        const json = JSON.parse(new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri)));
-        const scripts: Record<string, string> = json.scripts ?? {};
-        const dir = vscode.Uri.joinPath(uri, '..');
-        const entries = await vscode.workspace.fs.readDirectory(dir);
-        const pm = detectPackageManager(entries.map(([name]) => name));
-        const cwd = relToFolder(folder, dir);
-        for (const name of rankDevScripts(scripts).slice(0, 6)) {
-          items.push({ label: scriptCommand(pm, name), description: cwd || 'raiz', detail: scripts[name], command: scriptCommand(pm, name), cwd });
-        }
-      } catch {
-        // package.json inválido: ignora
-      }
-    }
-    items.push({ label: '$(edit) Digitar outro comando...', description: '', command: '', cwd: '' });
-    const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Qual comando inicia o servidor?', matchOnDetail: true });
-    if (!picked) return;
-    let { command, cwd } = picked;
-    if (!command) {
-      command = (await vscode.window.showInputBox({ prompt: 'Comando que inicia o servidor', placeHolder: 'npm run start:dev' })) ?? '';
-      if (!command) return;
-      cwd = (await vscode.window.showInputBox({ prompt: 'Pasta onde rodar (relativa ao projeto, vazio = raiz)', placeHolder: 'sgc-api' })) ?? '';
-    }
-    await cfg.update('restart.command', command, target);
-    await cfg.update('restart.cwd', cwd, target);
-  } else if (mode.value === 'task') {
+    await chooseStartCommand(prefer);
+    return;
+  }
+  if (mode.value === 'task') {
     const tasks = await vscode.tasks.fetchTasks();
     const picked = await vscode.window.showQuickPick(
       tasks.map((t) => ({ label: t.name, description: t.source, name: t.name })),
       { placeHolder: 'Qual task inicia o servidor?' },
     );
     if (!picked) return;
-    await cfg.update('restart.task', picked.name, target);
+    await restartStore.setTask(picked.name);
   }
 
-  await cfg.update('restart.mode', mode.value, target);
+  await restartStore.setMode(mode.value);
   if (mode.value === 'off') return;
-  const choice = await vscode.window.showInformationMessage(`${NAME}: pronto. Depois de cada troca, ${server.describe()}.`, 'Iniciar servidor agora');
-  if (choice) await server.start();
+  const choice = await vscode.window.showInformationMessage(
+    `${NAME}: pronto. Depois de cada troca, ${workspaceServer.describe()}.`,
+    'Iniciar servidor agora',
+  );
+  if (choice) await workspaceServer.start();
+}
+
+async function startServer(): Promise<void> {
+  if (services.list().length) {
+    await services.startAll();
+    return;
+  }
+  const mode = restartMode();
+  if (mode === 'task' || mode === 'debug') {
+    if (!(await workspaceServer.start())) await configureRestart();
+    return;
+  }
+  if (mode !== 'terminal' || restartStore.list().length === 0) return configureRestart();
+  const entry = await pickSavedCommand('Iniciar o servidor de qual pasta?');
+  if (entry && !(await folderServer(entry.folder).start())) await configureRestart(vscode.Uri.file(entry.cwd));
+}
+
+async function restartServer(): Promise<void> {
+  const mode = restartMode();
+  if (mode === 'task' || mode === 'debug') {
+    if (await workspaceServer.restart()) vscode.window.setStatusBarMessage('$(sync) Servidor reiniciado', 3000);
+    else await configureRestart();
+    return;
+  }
+  if (mode !== 'terminal' || restartStore.list().length === 0) return configureRestart();
+  const entry = await pickSavedCommand('Reiniciar o servidor de qual pasta?');
+  if (!entry) return;
+  if (await folderServer(entry.folder).restart()) {
+    vscode.window.setStatusBarMessage(`$(sync) Servidor reiniciado: ${folderLabel(entry.cwd)}`, 3000);
+  } else {
+    await configureRestart(vscode.Uri.file(entry.cwd));
+  }
+}
+
+/** Semáforo Env: Redefinir comando de inicialização. */
+async function resetRestartCommand(): Promise<void> {
+  if (restartStore.list().length === 0) {
+    void vscode.window.showInformationMessage(`${NAME}: nenhum comando de inicialização salvo neste workspace.`);
+    return;
+  }
+  const entry = await pickSavedCommand('Redefinir o comando de inicialização de qual pasta?', true);
+  if (!entry) return;
+  await restartStore.clear(entry.folder);
+  dropFolderServer(entry.folder);
+  const choice = await vscode.window.showInformationMessage(
+    `${NAME}: comando de inicialização de ${folderLabel(entry.cwd)} redefinido ("${entry.command}" não será mais usado).`,
+    'Escolher outro comando',
+  );
+  if (choice) await chooseStartCommand(vscode.Uri.file(entry.cwd));
 }
 
 // ───────────────────────── Ativação ─────────────────────────
@@ -864,19 +1155,26 @@ function setupWatchers(ctx: vscode.ExtensionContext): void {
 
 export function activate(ctx: vscode.ExtensionContext): void {
   tree = new EnvTreeProvider();
-  server = new ServerManager(restartConfig, () => folders()[0]?.uri);
+  restartStore = new RestartCommandStore(ctx.workspaceState);
+  workspaceServer = new ServerManager(workspaceRestartConfig);
   services = new ServiceManager(serviceDefs, serviceCwd);
   servicesTree = new ServicesTreeProvider(services);
   status = vscode.window.createStatusBarItem('semaforoEnv.status', vscode.StatusBarAlignment.Left, 100);
   status.name = NAME;
 
-  const cmd = (id: string, fn: (...args: any[]) => unknown) => vscode.commands.registerCommand(id, fn);
+  const cmd = (id: string, fn: (...args: unknown[]) => unknown) => vscode.commands.registerCommand(id, fn);
 
   ctx.subscriptions.push(
     tree,
     servicesTree,
     status,
-    server,
+    workspaceServer,
+    {
+      dispose: () => {
+        folderServers.forEach((s) => s.dispose());
+        folderServers.clear();
+      },
+    },
     services,
     vscode.window.createTreeView('semaforoEnv.view', { treeDataProvider: tree }),
     vscode.window.createTreeView('semaforoEnv.services', { treeDataProvider: servicesTree }),
@@ -901,16 +1199,9 @@ export function activate(ctx: vscode.ExtensionContext): void {
 
     // Reinício simples
     cmd('semaforoEnv.configureRestart', configureRestart),
-    cmd('semaforoEnv.startServer', async () => {
-      if (services.list().length) return services.startAll();
-      if (restartConfig().mode === 'off') return configureRestart();
-      if (!(await server.start())) await configureRestart();
-    }),
-    cmd('semaforoEnv.restartServer', async () => {
-      if (restartConfig().mode === 'off') return configureRestart();
-      if (await server.restart()) vscode.window.setStatusBarMessage('$(sync) Servidor reiniciado', 3000);
-      else await configureRestart();
-    }),
+    cmd('semaforoEnv.startServer', startServer),
+    cmd('semaforoEnv.restartServer', restartServer),
+    cmd('semaforoEnv.resetRestartCommand', resetRestartCommand),
 
     // Serviços
     cmd('semaforoEnv.configureServices', configureServices),
@@ -947,6 +1238,9 @@ export function activate(ctx: vscode.ExtensionContext): void {
   );
 
   setupWatchers(ctx);
+  void migrateRestartSettings().catch((e: unknown) => {
+    console.warn(`${NAME}: não consegui migrar ${CONFIG}.restart.* para o estado do workspace.`, e);
+  });
   void refresh().then(() => warnOnStartup());
 }
 

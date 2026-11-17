@@ -25,7 +25,11 @@ export function matchesGuard(commandLine: string, patterns: readonly string[]): 
 }
 
 function normalize(s: string): string {
-  return s.trim().replace(/\s+/g, ' ').toLowerCase();
+  return s
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .replace(/\bnpm run(?:-script)? start(?=\s|$)/g, 'npm start');
 }
 
 /** true se a linha de comando digitada é o comando do servidor configurado. */
@@ -87,9 +91,9 @@ export function planAllLocal(text: string, result: ParseResult): AllLocalPlan {
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
-/** Comando para rodar um script conforme o gerenciador de pacotes. */
+/** Comando para rodar um script conforme o gerenciador de pacotes. "start" no npm vira "npm start". */
 export function scriptCommand(pm: PackageManager, script: string): string {
-  if (pm === 'npm') return `npm run ${script}`;
+  if (pm === 'npm') return script === 'start' ? 'npm start' : `npm run ${script}`;
   if (pm === 'bun') return `bun run ${script}`;
   return `${pm} ${script}`;
 }
@@ -100,6 +104,23 @@ export function detectPackageManager(files: readonly string[]): PackageManager {
   if (files.includes('yarn.lock')) return 'yarn';
   if (files.includes('bun.lockb') || files.includes('bun.lock')) return 'bun';
   return 'npm';
+}
+
+const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', 'bun.lock'];
+
+/** A pasta tem algum lockfile? Sem lockfile, vale procurar na pasta de cima (monorepo). */
+export function hasLockfile(files: readonly string[]): boolean {
+  return files.some((f) => LOCKFILES.includes(f));
+}
+
+/** Os scripts de um package.json já parseado, ignorando o que não for texto. */
+export function packageScripts(pkg: unknown): Record<string, string> {
+  if (typeof pkg !== 'object' || pkg === null) return {};
+  const scripts: unknown = (pkg as { scripts?: unknown }).scripts;
+  if (typeof scripts !== 'object' || scripts === null) return {};
+  return Object.fromEntries(
+    Object.entries(scripts).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
 }
 
 /** Scripts que parecem iniciar um servidor de desenvolvimento, em ordem de relevância. */
