@@ -10,7 +10,7 @@ export interface RestartConfig {
   /** Pasta absoluta onde o comando roda (modo terminal). */
   cwd: string;
   task: string;
-  /** Nome curto da pasta do projeto (ex.: sgc-api), usado no terminal e nas mensagens. */
+  /** Nome curto da pasta do projeto (ex.: loja-api), usado no terminal e nas mensagens. */
   label?: string;
 }
 

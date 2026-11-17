@@ -34,25 +34,25 @@ test('Catálogo Fácil: banco local x supabase, com DIRECT_URL junto do supabase
   assert.equal(splitLines(p.newText)[0], 'NODE_ENV=development');
 });
 
-test('SGC: rótulos vindos de comentários, IP interno vira remoto, dois grupos separados', () => {
+test('Loja: rótulos vindos de comentários, IP interno vira remoto, dois grupos separados', () => {
   const env = [
     'NODE_ENV=development',
     '#local',
-    '#DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sgc',
-    'DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/sgc_validacao',
+    '#DATABASE_URL=postgresql://postgres:postgres@localhost:5432/loja',
+    'DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/loja_validacao',
     '#Homolog',
-    '#DATABASE_URL=postgresql://sgc:senha@10.26.0.51:5450/sgc',
+    '#DATABASE_URL=postgresql://loja:senha@10.0.0.10:5450/loja',
     '',
     '# API de estações de trabalho (homolog)',
-    'CONTROLE_API_URL=http://10.26.0.51:3034/api',
+    'ESTOQUE_API_URL=http://10.0.0.10:3034/api',
     '# API de estações de trabalho (local)',
-    '#CONTROLE_API_URL=http://localhost:3034/api',
+    '#ESTOQUE_API_URL=http://localhost:3034/api',
     'PORT=3000',
   ].join('\n');
   const { p, parsed } = check(env);
   assert.deepEqual(describeProposal(p), [
     'Banco: local, teste, homolog (remoto)',
-    'Controle api: local, homolog (remoto)',
+    'Estoque api: local, homolog (remoto)',
   ]);
   assert.equal(p.removedComments.length, 4);
   assert.equal(parsed.groups[0].options.find((o) => o.name === 'teste')!.state, 'active');
@@ -62,10 +62,10 @@ test('SGC: rótulos vindos de comentários, IP interno vira remoto, dois grupos 
 
 test('variáveis que mudam juntas viram um grupo só', () => {
   const env = [
-    'DATABASE_CONTROLE=postgresql://u:p@localhost:5432/controle',
-    'CONTROLE_API_URL=http://localhost:3001',
-    '#DATABASE_CONTROLE=postgresql://u:p@homolog.exemplo:5432/controle',
-    '#CONTROLE_API_URL=https://homolog.exemplo/api',
+    'DATABASE_ESTOQUE=postgresql://u:p@localhost:5432/estoque',
+    'ESTOQUE_API_URL=http://localhost:3001',
+    '#DATABASE_ESTOQUE=postgresql://u:p@homolog.exemplo:5432/estoque',
+    '#ESTOQUE_API_URL=https://homolog.exemplo/api',
   ].join('\n');
   const { p } = check(env);
   assert.equal(p.groups.length, 1);

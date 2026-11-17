@@ -2,7 +2,7 @@
   "name": "semaforo-env",
   "displayName": "Semáforo Env",
   "description": "Hub do ambiente local: troque bancos e APIs do .env com um clique, suba e reinicie o front e o back de vários sistemas num painel só, e evite rodar migration no lugar errado.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "arabella-dev",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -78,7 +78,7 @@
       },
       {
         "view": "semaforoEnv.services",
-        "contents": "Suba o front e o back dos seus sistemas por aqui, cada um com o próprio botão e status.\n[Detectar serviços](command:semaforoEnv.configureServices)\nVai testar vários sistemas juntos (ex.: Controle, SGC e Oráculo)? Crie um workspace com as pastas de todos e abra ele antes.\n[Criar workspace do ecossistema](command:semaforoEnv.createWorkspace)",
+        "contents": "Suba o front e o back dos seus sistemas por aqui, cada um com o próprio botão e status.\n[Detectar serviços](command:semaforoEnv.configureServices)\nVai testar vários sistemas juntos (ex.: Estoque, Loja e Pagamentos)? Crie um workspace com as pastas de todos e abra ele antes.\n[Criar workspace do ecossistema](command:semaforoEnv.createWorkspace)",
         "when": "!semaforoEnv.hasServices"
       }
     ],
@@ -422,7 +422,7 @@
         "semaforoEnv.restart.cwd": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Pasta onde rodar o comando quando a extensão precisar abrir um terminal novo, relativa ao projeto. Ex.: `sgc-api`.",
+          "markdownDescription": "Pasta onde rodar o comando quando a extensão precisar abrir um terminal novo, relativa ao projeto. Ex.: `loja-api`.",
           "order": 12,
           "markdownDeprecationMessage": "Obsoleto desde a 0.4.1. O reinício agora fica salvo por pasta de projeto no estado do workspace, fora do settings.json. Valores antigos são migrados uma vez ao abrir o projeto. Use **Semáforo Env: Configurar reinício automático** e **Semáforo Env: Redefinir comando de inicialização**."
         },
@@ -474,7 +474,7 @@
             "properties": {
               "system": {
                 "type": "string",
-                "description": "Sistema (ex.: SGC). Agrupa os serviços no painel."
+                "description": "Sistema (ex.: Loja). Agrupa os serviços no painel."
               },
               "name": {
                 "type": "string",
@@ -486,7 +486,7 @@
               },
               "cwd": {
                 "type": "string",
-                "description": "Pasta onde rodar o comando, relativa à pasta do workspace (ex.: sgc-api)."
+                "description": "Pasta onde rodar o comando, relativa à pasta do workspace (ex.: loja-api)."
               },
               "command": {
                 "type": "string",

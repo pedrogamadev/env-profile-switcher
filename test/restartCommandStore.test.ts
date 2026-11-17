@@ -25,9 +25,9 @@ class FakeMemento implements StateMemento {
   }
 }
 
-const API = 'C:\\Users\\dev\\GitHub\\sgc\\sgc-api';
-const APP = 'C:\\Users\\dev\\GitHub\\sgc\\sgc-app';
-const ROOT = 'C:\\Users\\dev\\GitHub\\sgc';
+const API = 'C:\\Users\\dev\\GitHub\\loja\\loja-api';
+const APP = 'C:\\Users\\dev\\GitHub\\loja\\loja-app';
+const ROOT = 'C:\\Users\\dev\\GitHub\\loja';
 
 function winStore(): { store: RestartCommandStore; memento: FakeMemento } {
   const memento = new FakeMemento();
@@ -35,13 +35,13 @@ function winStore(): { store: RestartCommandStore; memento: FakeMemento } {
 }
 
 test('chave = prefixo + caminho absoluto normalizado da pasta', () => {
-  assert.equal(restartCommandKey(API, 'win32'), 'semaforoEnv.restartCommand:c:\\users\\dev\\github\\sgc\\sgc-api');
+  assert.equal(restartCommandKey(API, 'win32'), 'semaforoEnv.restartCommand:c:\\users\\dev\\github\\loja\\loja-api');
   // Letra do drive, barras, barra final e ".." não criam chaves diferentes no Windows.
-  for (const variant of ['c:\\Users\\dev\\GitHub\\sgc\\sgc-api\\', 'C:/Users/dev/GitHub/sgc/sgc-api', 'C:\\Users\\dev\\GitHub\\sgc\\x\\..\\sgc-api']) {
+  for (const variant of ['c:\\Users\\dev\\GitHub\\loja\\loja-api\\', 'C:/Users/dev/GitHub/loja/loja-api', 'C:\\Users\\dev\\GitHub\\loja\\x\\..\\loja-api']) {
     assert.equal(restartCommandKey(variant, 'win32'), restartCommandKey(API, 'win32'));
   }
   // Fora do Windows a caixa importa.
-  assert.equal(normalizeFolderPath('/home/dev/Sgc/sgc-api/', 'linux'), '/home/dev/Sgc/sgc-api');
+  assert.equal(normalizeFolderPath('/home/dev/Loja/loja-api/', 'linux'), '/home/dev/Loja/loja-api');
 });
 
 test('cada pasta guarda o seu próprio comando', async () => {
@@ -50,7 +50,7 @@ test('cada pasta guarda o seu próprio comando', async () => {
   await store.set(APP, { command: 'npm start', cwd: APP });
 
   assert.deepEqual(store.get(API), { command: 'npm run start:dev', cwd: API });
-  assert.deepEqual(store.get('c:/users/dev/github/sgc/sgc-app/'), { command: 'npm start', cwd: APP });
+  assert.deepEqual(store.get('c:/users/dev/github/loja/loja-app/'), { command: 'npm start', cwd: APP });
   assert.equal(store.get(ROOT), undefined);
   assert.deepEqual(
     store.list().map((e) => e.command),
@@ -121,9 +121,9 @@ test('selectForEnvDir: .env na raiz reinicia os projetos de dentro', () => {
 
 test('migração: copia restart.* uma vez, resolvendo o cwd antigo a partir da primeira pasta', async () => {
   const { store } = winStore();
-  const migrated = await store.migrateLegacy({ mode: 'terminal', command: 'npm run start:dev', cwd: 'sgc-api' }, ROOT);
+  const migrated = await store.migrateLegacy({ mode: 'terminal', command: 'npm run start:dev', cwd: 'loja-api' }, ROOT);
   assert.equal(migrated, true);
-  assert.deepEqual(store.get(API), { command: 'npm run start:dev', cwd: 'C:\\Users\\dev\\GitHub\\sgc\\sgc-api' });
+  assert.deepEqual(store.get(API), { command: 'npm run start:dev', cwd: 'C:\\Users\\dev\\GitHub\\loja\\loja-api' });
   assert.equal(store.getMode(), 'terminal');
 
   // Segunda vez não lê mais nada, mesmo com outros valores.

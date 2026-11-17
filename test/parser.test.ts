@@ -23,11 +23,11 @@ const EXAMPLE = [
   '# @end',
   '# @group Banco de consulta',
   '# @option local',
-  'DATABASE_CONTROLE=postgres://localhost/controle',
-  'CONTROLE_API_URL=http://localhost:3001',
+  'DATABASE_ESTOQUE=postgres://localhost/estoque',
+  'ESTOQUE_API_URL=http://localhost:3001',
   '# @option homolog @danger',
-  '# DATABASE_CONTROLE=postgres://homolog.exemplo/controle',
-  '# CONTROLE_API_URL=https://homolog.exemplo/api',
+  '# DATABASE_ESTOQUE=postgres://homolog.exemplo/estoque',
+  '# ESTOQUE_API_URL=https://homolog.exemplo/api',
   '# @end',
   '',
 ].join('\n');
@@ -55,7 +55,7 @@ test('parse do exemplo: grupos, estados e @danger', () => {
 
   assert.equal(consulta.name, 'Banco de consulta');
   assert.equal(consulta.state, 'valid');
-  assert.deepEqual(consulta.options[0].keys, ['DATABASE_CONTROLE', 'CONTROLE_API_URL']);
+  assert.deepEqual(consulta.options[0].keys, ['DATABASE_ESTOQUE', 'ESTOQUE_API_URL']);
   assert.equal(consulta.options[1].danger, true);
 });
 
@@ -206,14 +206,14 @@ test('nomes duplicados geram erro', () => {
 test('@danger só conta como último token e não entra no nome', () => {
   const text = [
     '# @group DB',
-    '# @option homolog seec @danger',
+    '# @option homolog cliente @danger',
     'URL=a',
     '# @option @danger local',
     '# URL=b',
     '# @end',
   ].join('\n');
   const [a, b] = parseEnv(text).groups[0].options;
-  assert.equal(a.name, 'homolog seec');
+  assert.equal(a.name, 'homolog cliente');
   assert.equal(a.danger, true);
   assert.equal(b.name, '@danger local');
   assert.equal(b.danger, false);

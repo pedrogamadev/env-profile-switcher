@@ -120,7 +120,7 @@ function relFsPath(folder: vscode.WorkspaceFolder, fsPath: string): string {
   return path.relative(folder.uri.fsPath, fsPath).split(path.sep).join('/');
 }
 
-/** Nome curto de uma pasta de projeto: caminho relativo à pasta do workspace (ex.: sgc-api). */
+/** Nome curto de uma pasta de projeto: caminho relativo à pasta do workspace (ex.: loja-api). */
 function folderLabel(folderPath: string): string {
   const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(folderPath));
   if (!folder) return path.basename(folderPath) || folderPath;
@@ -876,7 +876,7 @@ async function createWorkspace(): Promise<void> {
     canSelectMany: true,
     defaultUri: base,
     openLabel: 'Incluir no ecossistema',
-    title: 'Escolha as pastas dos sistemas (ex.: controle, sgc, oraculo)',
+    title: 'Escolha as pastas dos sistemas (ex.: estoque, loja, pagamentos)',
   });
   if (!picked || picked.length === 0) return;
   const parent = vscode.Uri.joinPath(picked[0], '..');
@@ -985,7 +985,7 @@ async function pickStartCommand(prefer?: vscode.Uri): Promise<{ command: string;
   if (!base) return undefined;
   const rel = await vscode.window.showInputBox({
     prompt: `Pasta onde rodar, relativa a ${base.name} (vazio = raiz)`,
-    placeHolder: 'sgc-api',
+    placeHolder: 'loja-api',
     value: preferFolder && prefer ? relFsPath(preferFolder, prefer.fsPath) : '',
   });
   if (rel === undefined) return undefined;

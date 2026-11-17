@@ -140,7 +140,7 @@ export function rankDevScripts(scripts: Record<string, string>): string[] {
 // ───────────────────────── Serviços ─────────────────────────
 
 export interface ServiceDef {
-  /** Sistema ao qual o serviço pertence (ex.: "SGC"). */
+  /** Sistema ao qual o serviço pertence (ex.: "Loja"). */
   system: string;
   /** Nome curto (ex.: "back", "front"). */
   name: string;
@@ -227,7 +227,7 @@ export interface LocalPortRef {
 
 /**
  * Portas em localhost usadas pelas opções ativas dos grupos.
- * Ex.: CONTROLE_API_URL=http://localhost:3034 ativo => depende de algo rodando na 3034.
+ * Ex.: ESTOQUE_API_URL=http://localhost:3034 ativo => depende de algo rodando na 3034.
  */
 export function localPortRefs(text: string, result: ParseResult): LocalPortRef[] {
   if (result.errors.length > 0) return [];

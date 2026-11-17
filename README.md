@@ -13,7 +13,7 @@
 | Comentar e descomentar linhas do `.env` pra trocar de banco | Um clique na opção desejada |
 | Ctrl+C no terminal e subir o servidor de novo depois de cada troca | Os serviços que leem aquele `.env` reiniciam sozinhos |
 | Abrir 6 terminais pra testar 3 sistemas que conversam entre si | Painel **Serviços** com ▶ ■ ⟳ por serviço, por sistema ou tudo de uma vez |
-| Descobrir no log que a API local do outro sistema estava desligada | Aviso: "API do Controle está em local, mas controle · back está parado", com o botão **Iniciar** |
+| Descobrir no log que a API local do outro sistema estava desligada | Aviso: "API do Estoque está em local, mas estoque · back está parado", com o botão **Iniciar** |
 | Esquecer o homolog ligado | Status bar vermelha, aviso ao abrir o projeto e **🏠 Voltar tudo pra local** |
 | Rodar `prisma migrate dev` apontando pro banco da equipe | **Freio de mão:** o comando é cancelado e o Semáforo pergunta antes |
 
@@ -37,11 +37,11 @@ DIRECT_URL=postgresql://postgres:postgres@localhost:5432/app
 # DIRECT_URL=postgresql://usuario:senha@db.supabase.co:5432/postgres
 # @end
 
-# @group API do Controle
+# @group API do Estoque
 # @option local
-CONTROLE_API_URL=http://localhost:3034/api
+ESTOQUE_API_URL=http://localhost:3034/api
 # @option homolog @danger
-# CONTROLE_API_URL=https://homolog.exemplo/api
+# ESTOQUE_API_URL=https://homolog.exemplo/api
 # @end
 ```
 
@@ -76,7 +76,7 @@ O painel **Serviços** mostra cada front e back com um semáforo próprio:
 | 🔴 | Caiu (o processo terminou com erro) |
 
 - **▶ ■ ⟳** por serviço, **▶** por sistema (sobe o back antes do front) e **Iniciar/Parar todos** no topo.
-- Cada serviço roda no **próprio terminal visível** (`sgc · back`, `sgc · front`...). Clique no serviço pra ver os logs.
+- Cada serviço roda no **próprio terminal visível** (`loja · back`, `loja · front`...). Clique no serviço pra ver os logs.
 - **Reinício certeiro:** ao trocar um `.env`, só reiniciam os serviços que rodam na pasta daquele `.env`. O front não reinicia quando você troca o banco do back.
 - **Dependências:** se uma opção ativa aponta pra `localhost:PORTA` e o serviço daquela porta está parado, o painel avisa e oferece **Iniciar**.
 - **Adota o que você já roda:** se você mesmo rodar `npm run dev` num terminal, na pasta de um serviço configurado, o painel reconhece e passa a controlar aquele terminal.
@@ -84,21 +84,21 @@ O painel **Serviços** mostra cada front e back com um semáforo próprio:
 
 ## Vários sistemas juntos (ecossistema)
 
-Pra testar sistemas que conversam entre si (ex.: Controle, SGC e Oráculo, cada um com front e back), abra todos numa janela só com um **workspace de várias pastas**:
+Pra testar sistemas que conversam entre si (ex.: Estoque, Loja e Pagamentos, cada um com front e back), abra todos numa janela só com um **workspace de várias pastas**:
 
 1. No painel **Serviços** (menu **⋯**), use **Criar workspace do ecossistema** e escolha as pastas dos sistemas.
 2. Abra o workspace criado.
 3. Clique em **Detectar serviços**.
 
-Cada sistema passa a ter o **seu** `.env` no painel **Perfis**, e a status bar resume todos (ex.: `sgc: homolog · controle · oraculo`). Os serviços ficam salvos no próprio arquivo `.code-workspace`, então dá pra versionar e a equipe inteira ganha o mesmo painel:
+Cada sistema passa a ter o **seu** `.env` no painel **Perfis**, e a status bar resume todos (ex.: `loja: homolog · estoque · pagamentos`). Os serviços ficam salvos no próprio arquivo `.code-workspace`, então dá pra versionar e a equipe inteira ganha o mesmo painel:
 
 ```json
 {
-  "folders": [{ "path": "controle" }, { "path": "sgc" }, { "path": "oraculo" }],
+  "folders": [{ "path": "estoque" }, { "path": "loja" }, { "path": "pagamentos" }],
   "settings": {
     "semaforoEnv.services": [
-      { "system": "sgc", "name": "back", "folder": "sgc", "cwd": "sgc-api", "command": "npm run start:dev", "port": 3000 },
-      { "system": "sgc", "name": "front", "folder": "sgc", "cwd": "sgc-web", "command": "npm run dev", "port": 5174 }
+      { "system": "loja", "name": "back", "folder": "loja", "cwd": "loja-api", "command": "npm run start:dev", "port": 3000 },
+      { "system": "loja", "name": "front", "folder": "loja", "cwd": "loja-web", "command": "npm run dev", "port": 5174 }
     ]
   }
 }
@@ -115,7 +115,7 @@ Cada sistema passa a ter o **seu** `.env` no painel **Perfis**, e a status bar r
 
 Sem o painel de serviços configurado, ainda dá pra reiniciar o servidor sozinho: **Ctrl+Shift+P → Semáforo Env: Configurar reinício automático**. O Semáforo reinicia o terminal onde o servidor está rodando (o seu) ou abre um terminal visível. Também funciona com tasks do VS Code e com a sessão de debug (F5).
 
-O comando escolhido fica salvo **por pasta de projeto** (a pasta do `package.json`), no estado do workspace, e não no `settings.json`. Num projeto com `sgc-api` e `sgc-app`, cada um guarda o seu, e trocar o `.env` de `sgc-api` reinicia só o servidor de `sgc-api`. Para esquecer um comando salvo: **Semáforo Env: Redefinir comando de inicialização**.
+O comando escolhido fica salvo **por pasta de projeto** (a pasta do `package.json`), no estado do workspace, e não no `settings.json`. Num projeto com `loja-api` e `loja-app`, cada um guarda o seu, e trocar o `.env` de `loja-api` reinicia só o servidor de `loja-api`. Para esquecer um comando salvo: **Semáforo Env: Redefinir comando de inicialização**.
 
 ## Configurações
 

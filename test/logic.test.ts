@@ -22,11 +22,11 @@ const ENV = [
   '# @option homolog @danger',
   'DATABASE_URL=homolog',
   '# @end',
-  '# @group API do Controle',
+  '# @group API do Estoque',
   '# @option local',
-  '# CONTROLE_API_URL=local',
+  '# ESTOQUE_API_URL=local',
   '# @option homolog @danger',
-  'CONTROLE_API_URL=homolog',
+  'ESTOQUE_API_URL=homolog',
   '# @end',
   '# @group Cache',
   '# @option local',
@@ -66,7 +66,7 @@ test('activeDangers lista só as opções remotas ativas', () => {
   const d = activeDangers(parseEnv(ENV));
   assert.deepEqual(
     d.map((x) => `${x.group.name}:${x.option.name}`),
-    ['Banco principal:homolog', 'API do Controle:homolog'],
+    ['Banco principal:homolog', 'API do Estoque:homolog'],
   );
   assert.deepEqual(activeDangers(undefined), []);
 });
@@ -83,7 +83,7 @@ test('voltar tudo pra local mexe só nos grupos remotos', () => {
   const plan = planAllLocal(ENV, r);
   assert.deepEqual(plan.changed, [
     { group: 'Banco principal', from: 'homolog', to: 'local' },
-    { group: 'API do Controle', from: 'homolog', to: 'local' },
+    { group: 'API do Estoque', from: 'homolog', to: 'local' },
   ]);
   const out = applyEdits(ENV, plan.edits);
   const after = parseEnv(out);
@@ -149,20 +149,20 @@ import { normalizeServices, serviceId, serviceUsesEnvDir, classifyPackage, guess
 
 test('serviços: normaliza a configuração e ignora entradas inválidas', () => {
   const s = normalizeServices([
-    { system: 'SGC', name: 'back', cwd: 'sgc-api', command: 'npm run start:dev', port: 3000 },
-    { system: 'SGC', name: 'back', command: 'duplicado' },
+    { system: 'Loja', name: 'back', cwd: 'loja-api', command: 'npm run start:dev', port: 3000 },
+    { system: 'Loja', name: 'back', command: 'duplicado' },
     { name: 'front', command: 'npm run dev', port: 99999 },
     { system: 'X', command: 'sem nome' },
     'lixo',
   ]);
-  assert.deepEqual(s.map(serviceId), ['SGC · back', 'Projeto · front']);
+  assert.deepEqual(s.map(serviceId), ['Loja · back', 'Projeto · front']);
   assert.equal(s[1].port, undefined);
   assert.deepEqual(normalizeServices(undefined), []);
 });
 
 test('serviço lê o .env só da própria pasta', () => {
-  assert.ok(serviceUsesEnvDir('C:\\Users\\p\\sgc\\sgc-api', 'c:/users/p/sgc/sgc-api/'));
-  assert.ok(!serviceUsesEnvDir('/p/sgc/sgc-web', '/p/sgc/sgc-api'));
+  assert.ok(serviceUsesEnvDir('C:\\Users\\p\\loja\\loja-api', 'c:/users/p/loja/loja-api/'));
+  assert.ok(!serviceUsesEnvDir('/p/loja/loja-web', '/p/loja/loja-api'));
 });
 
 test('classifica back/front e adivinha a porta', () => {
@@ -177,11 +177,11 @@ test('classifica back/front e adivinha a porta', () => {
 test('portas locais usadas pelas opções ativas', () => {
   const env = [
     'FRONTEND_URL=http://localhost:5173',
-    '# @group API do Controle',
+    '# @group API do Estoque',
     '# @option local',
-    'CONTROLE_API_URL=http://localhost:3034/api',
+    'ESTOQUE_API_URL=http://localhost:3034/api',
     '# @option homolog @danger',
-    '# CONTROLE_API_URL=http://10.26.0.51:3034/api',
+    '# ESTOQUE_API_URL=http://10.0.0.10:3034/api',
     '# @end',
     '# @group Banco',
     '# @option local',
@@ -189,5 +189,5 @@ test('portas locais usadas pelas opções ativas', () => {
     '# @end',
   ].join('\n');
   const refs = localPortRefs(env, parseEnv(env));
-  assert.deepEqual(refs.map((r) => `${r.key}:${r.port}`), ['CONTROLE_API_URL:3034', 'DATABASE_URL:5432']);
+  assert.deepEqual(refs.map((r) => `${r.key}:${r.port}`), ['ESTOQUE_API_URL:3034', 'DATABASE_URL:5432']);
 });

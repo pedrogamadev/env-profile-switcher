@@ -4,7 +4,7 @@ import * as path from 'path';
  * Persistência do reinício simples no estado do workspace (context.workspaceState).
  *
  * Nada aqui grava em settings.json: o comando de inicialização é guardado por pasta de projeto
- * (o diretório do package.json escolhido), então sgc-api e sgc-app têm cada um o seu.
+ * (o diretório do package.json escolhido), então loja-api e loja-app têm cada um o seu.
  * O módulo não importa o "vscode" em tempo de execução, para poder ser testado com node --test.
  */
 
@@ -84,7 +84,7 @@ function isInside(child: string, parent: string, platform: NodeJS.Platform): boo
 /**
  * Quais comandos reiniciar quando o .env de envDir muda:
  * 1. o da própria pasta do .env, ou da pasta mais próxima acima dela;
- * 2. se não houver, todos os que ficam dentro dela (ex.: .env na raiz lido por sgc-api e sgc-app).
+ * 2. se não houver, todos os que ficam dentro dela (ex.: .env na raiz lido por loja-api e loja-app).
  */
 export function selectForEnvDir<T extends { folder: string }>(
   envDir: string,
