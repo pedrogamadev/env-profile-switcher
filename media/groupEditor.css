@@ -1,0 +1,93 @@
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  padding: 16px 24px 32px;
+}
+main { max-width: 1100px; }
+[hidden] { display: none !important; }
+.mono { font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size); }
+.muted, .hint { color: var(--vscode-descriptionForeground); }
+.hint { margin: 8px 0 12px; line-height: 1.5; }
+.hint strong { color: var(--vscode-foreground); }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.group-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+input[type='text'] {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  min-width: 0;
+}
+input[type='text'].mono { font-family: var(--vscode-editor-font-family); }
+input[type='text']:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+#name { width: 280px; font-size: 1.1em; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin: 4px 0 12px; table-layout: fixed; }
+th, td {
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+th { font-weight: 600; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+th.c-key .mono { color: var(--vscode-foreground); }
+tr.active td { background: var(--vscode-list-inactiveSelectionBackground); }
+tr.danger td.c-name input { border-left: 3px solid var(--vscode-errorForeground); }
+.c-active, .c-danger, .c-del { text-align: center; white-space: nowrap; }
+th.c-active { width: 52px; }
+th.c-name { width: 150px; }
+th.c-danger { width: 72px; }
+th.c-del { width: 36px; }
+.c-name input { width: 100%; box-sizing: border-box; }
+th.c-key { overflow: hidden; text-overflow: ellipsis; }
+td.c-val input { width: 100%; box-sizing: border-box; }
+button {
+  font-family: inherit;
+  font-size: inherit;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 2px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+button:hover { background: var(--vscode-button-hoverBackground); }
+button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+button.icon { background: transparent; color: var(--vscode-descriptionForeground); padding: 0 6px; font-size: 1.1em; }
+button.icon:hover { color: var(--vscode-errorForeground); background: transparent; }
+button.val {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--vscode-foreground);
+  padding: 3px 6px;
+  border: 1px dashed transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.val:hover { border-color: var(--vscode-input-border, var(--vscode-focusBorder)); background: transparent; }
+button.val.empty { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); font-style: italic; }
+.empty-row td { color: var(--vscode-descriptionForeground); font-style: italic; padding: 18px 8px; }
+.toolbar, footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.add-key { display: inline-flex; gap: 6px; }
+.add-key input { width: 200px; }
+.toggle { margin-left: 8px; display: inline-flex; align-items: center; gap: 6px; color: var(--vscode-descriptionForeground); }
+footer { margin-top: 20px; }
+.spacer { flex: 1; }
+.notice {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--vscode-inputValidation-infoBorder, var(--vscode-focusBorder));
+  background: var(--vscode-inputValidation-infoBackground, transparent);
+}
+.field-error { color: var(--vscode-errorForeground); margin: 6px 0 0; }
+.errors { color: var(--vscode-errorForeground); margin: 12px 0 0; padding-left: 18px; }
+.errors li { margin: 2px 0; }

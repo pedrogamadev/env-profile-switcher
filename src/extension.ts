@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { ParseResult, activeOption, computeSelection, formatError, parseEnv } from './parser';
-import { EnvTreeProvider, EnvView, Light } from './treeProvider';
+import { ParseResult, activeOption, computeSelection, formatError, parseEnv, splitLines } from './parser';
+import { EnvTreeProvider, EnvView, Light, Node, Suggestion } from './treeProvider';
 import { EXAMPLE_ENV } from './example';
 import {
   DEFAULT_GUARD_PATTERNS,
@@ -24,6 +24,22 @@ import { Proposal, describeProposal, proposeOrganization } from './organize';
 import { RestartConfig, RestartMode, ServerManager } from './server';
 import { ServiceManager } from './services';
 import { DependencyWarning, ServicesTreeProvider, SvcNode } from './servicesTree';
+import {
+  ApplyResult,
+  GroupModel,
+  activeValues,
+  applyGroupModel,
+  groupRefs,
+  looseKeys,
+  mergeLoose,
+  modelFromGroup,
+  modelFromLoose,
+  normalizeName,
+  parseAssignment,
+  validateModel,
+} from './groupModel';
+import { ApplyOutcome, openGroupEditor } from './groupEditor';
+import { isEnvDocument, registerEnvAssist } from './envAssist';
 import {
   LegacyRestartSettings,
   RestartCommandStore,
@@ -60,6 +76,8 @@ const contexts = new Map<string, EnvContext>();
 const previews = new Map<string, string>();
 let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 let guardAllowOnce: { cmd: string; until: number } | undefined;
+let extensionUri: vscode.Uri;
+let envAssist: { refresh(): void } | undefined;
 
 // ───────────────────────── Configuração ─────────────────────────
 
@@ -279,14 +297,20 @@ async function refresh(): Promise<void> {
     });
   }
 
-  const views: EnvView[] = [...contexts.values()].filter(hasContent).map((c) => ({
-    key: c.key,
-    name: c.folder.name,
-    fileLabel: c.uri ? relToFolder(c.folder, c.uri) : '',
-    result: c.result!,
-    light: lightOf(c.result),
-  }));
+  const views: EnvView[] = [...contexts.values()]
+    .map((c) => ({ c, suggestions: suggestionsOf(c) }))
+    .filter(({ c, suggestions }) => hasContent(c) || suggestions.length > 0)
+    .map(({ c, suggestions }) => ({
+      key: c.key,
+      name: c.folder.name,
+      uri: c.uri?.toString() ?? '',
+      fileLabel: c.uri ? relToFolder(c.folder, c.uri) : '',
+      result: c.result!,
+      light: lightOf(c.result),
+      suggestions,
+    }));
   tree.setViews(views);
+  envAssist?.refresh();
   void vscode.commands.executeCommand(
     'setContext',
     'semaforoEnv.fileExists',
@@ -294,6 +318,16 @@ async function refresh(): Promise<void> {
   );
   updateStatusBar();
   updateDependencyWarnings();
+}
+
+/** Variáveis com alternativas ainda fora de grupos, mostradas como sugestão no painel. */
+function suggestionsOf(c: EnvContext): Suggestion[] {
+  if (c.text === undefined || !c.result || c.result.errors.length > 0) return [];
+  try {
+    return proposeOrganization(c.text).groups.map((g) => ({ name: g.name, keys: g.keys, options: g.options.map((o) => o.name) }));
+  } catch {
+    return [];
+  }
 }
 
 function scheduleRefresh(): void {
@@ -614,39 +648,49 @@ async function warnOnStartup(): Promise<void> {
 
 // ───────────────────────── Organizar .env ─────────────────────────
 
-async function previewAndApply(doc: vscode.TextDocument, proposal: Proposal): Promise<void> {
+/** Mostra o antes e depois, pede confirmação e grava o texto inteiro do .env. */
+async function confirmReplace(
+  doc: vscode.TextDocument,
+  newText: string,
+  opts: { previewName: string; title: string; message: string; detail: string; done: string },
+): Promise<boolean> {
   const id = `${Date.now()}`;
-  previews.set(id, proposal.newText);
-  const previewUri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: '/.env (organizado)', query: id });
-  await vscode.commands.executeCommand('vscode.diff', doc.uri, previewUri, '.env ↔ organizado pelo Semáforo', { preview: true });
+  previews.set(id, newText);
+  const previewUri = vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: `/${opts.previewName}`, query: id });
+  await vscode.commands.executeCommand('vscode.diff', doc.uri, previewUri, opts.title, { preview: true });
+  const choice = await vscode.window.showInformationMessage(opts.message, { modal: true, detail: opts.detail }, 'Aplicar');
+  previews.delete(id);
+  if (choice !== 'Aplicar') return false;
 
+  const last = doc.lineAt(doc.lineCount - 1);
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(doc.uri, new vscode.Range(new vscode.Position(0, 0), last.range.end), newText);
+  if (!(await vscode.workspace.applyEdit(edit))) return false;
+  await doc.save();
+  await refresh();
+  await vscode.window.showTextDocument(doc);
+  vscode.window.setStatusBarMessage(`$(check) ${NAME}: ${opts.done} Ctrl+Z desfaz.`, 4000);
+  return true;
+}
+
+async function previewAndApply(doc: vscode.TextDocument, proposal: Proposal): Promise<void> {
   const lines = describeProposal(proposal);
   const removed = proposal.removedComments.length
     ? `\n\n${proposal.removedComments.length} comentário(s) que só indicavam o ambiente serão removidos.`
     : '';
-  const choice = await vscode.window.showInformationMessage(
-    `Organizar o .env em ${proposal.groups.length} grupo(s)?`,
-    {
-      modal: true,
-      detail: `${lines.join('\n')}${removed}\n\nNenhum valor muda: as linhas só são agrupadas. Dá pra desfazer com Ctrl+Z.`,
-    },
-    'Aplicar',
-  );
-  previews.delete(id);
-  if (choice !== 'Aplicar') return;
-
-  const last = doc.lineAt(doc.lineCount - 1);
-  const edit = new vscode.WorkspaceEdit();
-  edit.replace(doc.uri, new vscode.Range(new vscode.Position(0, 0), last.range.end), proposal.newText);
-  if (!(await vscode.workspace.applyEdit(edit))) return;
-  await doc.save();
-  await refresh();
-  await vscode.window.showTextDocument(doc);
-  vscode.window.setStatusBarMessage(`$(check) ${NAME}: .env organizado. Ctrl+Z desfaz.`, 4000);
+  await confirmReplace(doc, proposal.newText, {
+    previewName: '.env (organizado)',
+    title: '.env ↔ organizado pelo Semáforo',
+    message: `Organizar o .env em ${proposal.groups.length} grupo(s)?`,
+    detail: `${lines.join('\n')}${removed}\n\nNenhum valor muda: as linhas só são agrupadas. Dá pra desfazer com Ctrl+Z.`,
+    done: '.env organizado.',
+  });
 }
 
-async function organize(key?: unknown): Promise<void> {
+async function organize(arg?: unknown): Promise<void> {
   if (contexts.size === 0) await refresh();
+  // Pode vir do nó "Sugestões" da árvore.
+  const key = arg && typeof arg === 'object' && 'ctx' in arg ? (arg as { ctx: EnvView }).ctx.key : arg;
   const active = vscode.window.activeTextEditor?.document;
   let ctx = typeof key === 'string' ? ctxFor(key) : active ? ctxForUri(active.uri) : undefined;
   if (!ctx) {
@@ -704,6 +748,241 @@ async function groupFromSelection(): Promise<void> {
   const name = await vscode.window.showInputBox({ prompt: 'Nome do grupo', value: first.groups[0].name });
   if (!name) return;
   await previewAndApply(doc, proposeOrganization(doc.getText(), { onlyLines: lines, groupName: name.trim() }));
+}
+
+// ───────────────────────── Editor em tabela ─────────────────────────
+
+function uriArg(arg: unknown): vscode.Uri | undefined {
+  if (arg instanceof vscode.Uri) return arg;
+  if (typeof arg !== 'string' || !/^[a-z][a-z0-9+.-]*:/i.test(arg)) return undefined;
+  try {
+    return vscode.Uri.parse(arg, true);
+  } catch {
+    return undefined;
+  }
+}
+
+/** O documento do .env pedido, o do editor ativo ou o do sistema escolhido. */
+async function envDocument(uri?: vscode.Uri): Promise<vscode.TextDocument | undefined> {
+  if (contexts.size === 0) await refresh();
+  let target = uri;
+  if (!target) {
+    const active = vscode.window.activeTextEditor?.document;
+    target = active && isEnvDocument(active) ? active.uri : (await pickContext('Em qual .env?'))?.uri;
+  }
+  if (!target || !(await exists(target))) {
+    const choice = await vscode.window.showWarningMessage(`${NAME}: não encontrei o .env.`, 'Escolher arquivo .env');
+    if (choice) await pickFile();
+    return undefined;
+  }
+  return vscode.workspace.openTextDocument(target);
+}
+
+/** Parse do documento; se tiver erro, avisa e oferece ir até a linha. */
+async function parsedOrWarn(doc: vscode.TextDocument): Promise<ParseResult | undefined> {
+  const parsed = parseEnv(doc.getText());
+  if (parsed.errors.length === 0) return parsed;
+  const first = parsed.errors[0];
+  const choice = await vscode.window.showErrorMessage(`${NAME}: corrija o .env primeiro. ${formatError(first)}`, 'Ir até a linha');
+  if (choice) {
+    const editor = await vscode.window.showTextDocument(doc);
+    const pos = new vscode.Position(first.line, 0);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+  }
+  return undefined;
+}
+
+function fileLabelOf(uri: vscode.Uri): string {
+  const folder = vscode.workspace.getWorkspaceFolder(uri);
+  if (!folder) return path.basename(uri.fsPath);
+  const rel = relToFolder(folder, uri);
+  return folders().length > 1 ? `${folder.name}/${rel}` : rel;
+}
+
+function describeModel(m: GroupModel): string {
+  const opts = m.options
+    .map((o, i) => `${normalizeName(o.name)}${i === m.active ? ' (ativa)' : ''}${o.danger ? ' (remoto)' : ''}`)
+    .join(', ');
+  return `Opções: ${opts}\nVariáveis: ${m.keys.join(', ')}`;
+}
+
+function sameValues(a: Map<string, string>, b: Map<string, string>): boolean {
+  return a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+async function applyFromEditor(uri: vscode.Uri, model: GroupModel, originalName: string | undefined): Promise<ApplyOutcome> {
+  const doc = await vscode.workspace.openTextDocument(uri);
+  const text = doc.getText();
+  const errors = validateModel(model, groupRefs(text).filter((g) => g.name !== originalName));
+  if (errors.length > 0) return errors;
+  let result: ApplyResult;
+  try {
+    result = applyGroupModel(text, model, originalName);
+  } catch (e) {
+    return [errorText(e)];
+  }
+  if (result.text === text) {
+    vscode.window.setStatusBarMessage(`${NAME}: nada mudou no .env`, 2500);
+    return 'done';
+  }
+  const name = normalizeName(model.name);
+  const extra = [
+    result.moved ? `${plural(result.moved, 'linha solta', 'linhas soltas')} dessas variáveis ${result.moved === 1 ? 'entra' : 'entram'} no grupo.` : '',
+    result.released.length ? `${result.released.join(', ')} sai do grupo e fica no .env com o valor da opção ativa.` : '',
+  ].filter(Boolean);
+  const ok = await confirmReplace(doc, result.text, {
+    previewName: `.env (${name})`,
+    title: `.env ↔ ${name}`,
+    message: originalName === undefined ? `Criar o seletor "${name}" no .env?` : `Salvar o grupo "${name}" no .env?`,
+    detail: `${describeModel(model)}${extra.length ? '\n\n' + extra.join('\n') : ''}\n\nDá pra desfazer com Ctrl+Z.`,
+    done: `seletor "${name}" salvo.`,
+  });
+  if (!ok) return [];
+
+  // Se o valor ativo mudou, quem lê esse .env reinicia, como numa troca pelo painel.
+  const ctx = ctxForUri(doc.uri);
+  const keys = [...new Set([...model.keys, ...result.released])];
+  if (ctx && !sameValues(activeValues(text, keys), activeValues(result.text, keys))) {
+    await afterSwitch(ctx, `${name}: ${normalizeName(model.options[model.active].name)} ativo`);
+  }
+  return 'done';
+}
+
+async function openEditor(doc: vscode.TextDocument, model: GroupModel, originalName: string | undefined, notices: string[]): Promise<void> {
+  const uri = doc.uri;
+  openGroupEditor(
+    extensionUri,
+    { model, fileLabel: fileLabelOf(uri), notices, keySuggestions: looseKeys(doc.getText()), isNew: originalName === undefined },
+    {
+      addKey: async (m, key) => {
+        const current = (await vscode.workspace.openTextDocument(uri)).getText();
+        const owner = groupRefs(current).find((g) => g.name !== originalName && g.keys.includes(key));
+        if (owner) return { error: `${key} já pertence ao grupo "${owner.name}". Cada variável só pode estar em um grupo.` };
+        const n = mergeLoose(m, current, [key]);
+        return {
+          model: m,
+          notice: n ? `${plural(n, 'valor', 'valores')} de ${key} que já ${n === 1 ? 'estava' : 'estavam'} no .env ${n === 1 ? 'entrou' : 'entraram'} na tabela.` : undefined,
+        };
+      },
+      apply: (m) => applyFromEditor(uri, m, originalName),
+      openFile: () => void vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside, preview: false }),
+    },
+  );
+}
+
+/** Abre a tabela de um grupo existente (nó da árvore, CodeLens/hover ou paleta). */
+async function editGroup(a?: unknown, b?: unknown): Promise<void> {
+  let uri = uriArg(a);
+  let name = typeof b === 'string' ? b : undefined;
+  const node = a as Node | undefined;
+  if (node && typeof node === 'object' && 'type' in node && node.type === 'group') {
+    uri = uriArg(node.ctx.uri);
+    name = node.group.name;
+  }
+  const doc = await envDocument(uri);
+  if (!doc) return;
+  const parsed = await parsedOrWarn(doc);
+  if (!parsed) return;
+  if (!name) {
+    if (parsed.groups.length === 0) {
+      const choice = await vscode.window.showInformationMessage(`${NAME}: esse .env ainda não tem seletores.`, 'Montar um em tabela');
+      if (choice) await newGroup(doc.uri);
+      return;
+    }
+    name =
+      parsed.groups.length === 1
+        ? parsed.groups[0].name
+        : (await vscode.window.showQuickPick(parsed.groups.map((g) => g.name), { placeHolder: 'Editar qual grupo?' }));
+    if (!name) return;
+  }
+  const g = parsed.groups.find((x) => x.name === name);
+  if (!g) {
+    void vscode.window.showErrorMessage(`${NAME}: o grupo "${name}" não existe mais nesse .env.`);
+    return;
+  }
+  const text = doc.getText();
+  const model = modelFromGroup(text, g);
+  const notices: string[] = [];
+  const merged = mergeLoose(model, text, model.keys);
+  if (merged) {
+    notices.push(
+      `${plural(merged, 'valor', 'valores')} dessas variáveis ${merged === 1 ? 'estava' : 'estavam'} fora do grupo, solto no .env. ` +
+        'Já ' + (merged === 1 ? 'está' : 'estão') + ' na tabela e, ao aplicar, entra' + (merged === 1 ? '' : 'm') + ' no grupo.',
+    );
+  }
+  if (model.active < 0) notices.push('Nenhuma opção está ativa agora (grupo inconsistente). Escolha uma na coluna Ativa.');
+  await openEditor(doc, model, g.name, notices);
+}
+
+/** Tabela em branco para montar um seletor do zero. */
+async function newGroup(a?: unknown): Promise<void> {
+  const doc = await envDocument(uriArg(a));
+  if (!doc || !(await parsedOrWarn(doc))) return;
+  const model: GroupModel = {
+    name: '',
+    keys: [],
+    options: [
+      { name: 'local', danger: false, values: {} },
+      { name: 'homolog', danger: true, values: {} },
+    ],
+    active: 0,
+  };
+  await openEditor(doc, model, undefined, []);
+}
+
+/** "Transformar em seletor": a tabela já preenchida com os valores soltos dessa variável. */
+async function groupFromKey(a?: unknown, key?: unknown): Promise<void> {
+  if (typeof key !== 'string') return;
+  const doc = await envDocument(uriArg(a));
+  if (!doc) return;
+  const parsed = await parsedOrWarn(doc);
+  if (!parsed) return;
+  const text = doc.getText();
+  let keys = [key];
+  let name: string | undefined;
+  const proposed = proposeOrganization(text).groups.find((g) => g.keys.includes(key));
+  if (proposed) {
+    // Inclui as variáveis que mudam junto (ex.: DIRECT_URL no mesmo host).
+    const lines = splitLines(text);
+    keys = [...new Set(proposed.options.flatMap((o) => o.lines).flatMap((n) => parseAssignment(lines[n])?.key ?? []))];
+    name = proposed.name;
+  }
+  const model = modelFromLoose(text, keys, name);
+  const taken = new Set(parsed.groups.map((g) => g.name));
+  if (taken.has(model.name)) {
+    const base = model.name;
+    for (let i = 2; taken.has(model.name); i++) model.name = `${base} ${i}`;
+  }
+  const notices = [
+    `Montei a tabela com os ${model.options.length} valores de ${keys.join(' + ')} que já estavam no .env. ` +
+      'Confira os nomes das opções e o que é remoto, e clique em Aplicar. Nenhum valor muda: as linhas só passam a ficar organizadas.',
+  ];
+  await openEditor(doc, model, undefined, notices);
+}
+
+/** CodeLens "Trocar": escolhe a opção ativa de um grupo do .env controlado. */
+async function switchGroup(a?: unknown, groupName?: unknown): Promise<void> {
+  const uri = uriArg(a);
+  const ctx = uri ? ctxForUri(uri) : undefined;
+  const group = ctx?.result?.groups.find((g) => g.name === groupName);
+  if (!ctx || !group) {
+    await quickSwitch();
+    return;
+  }
+  const picked = await vscode.window.showQuickPick(
+    group.options.map((o) => ({
+      label: o.name,
+      description: [o.state === 'active' ? 'ativa' : '', o.danger ? 'remoto' : ''].filter(Boolean).join(' · '),
+      option: o,
+    })),
+    { placeHolder: `${group.name}: qual opção ativar?` },
+  );
+  if (picked) await selectOption(group.name, picked.option.name, ctx.key);
 }
 
 // ───────────────────────── Arquivos ─────────────────────────
@@ -1154,17 +1433,24 @@ function setupWatchers(ctx: vscode.ExtensionContext): void {
 }
 
 export function activate(ctx: vscode.ExtensionContext): void {
+  extensionUri = ctx.extensionUri;
   tree = new EnvTreeProvider();
+  const assist = registerEnvAssist((uri) => !!ctxForUri(uri));
+  envAssist = assist;
   restartStore = new RestartCommandStore(ctx.workspaceState);
   workspaceServer = new ServerManager(workspaceRestartConfig);
-  services = new ServiceManager(serviceDefs, serviceCwd);
+  const log = vscode.window.createOutputChannel(NAME, { log: true });
+  services = new ServiceManager(serviceDefs, serviceCwd, log);
   servicesTree = new ServicesTreeProvider(services);
+  const servicesView = vscode.window.createTreeView('semaforoEnv.services', { treeDataProvider: servicesTree });
   status = vscode.window.createStatusBarItem('semaforoEnv.status', vscode.StatusBarAlignment.Left, 100);
   status.name = NAME;
 
   const cmd = (id: string, fn: (...args: unknown[]) => unknown) => vscode.commands.registerCommand(id, fn);
 
   ctx.subscriptions.push(
+    log,
+    ...assist.disposables,
     tree,
     servicesTree,
     status,
@@ -1177,7 +1463,12 @@ export function activate(ctx: vscode.ExtensionContext): void {
     },
     services,
     vscode.window.createTreeView('semaforoEnv.view', { treeDataProvider: tree }),
-    vscode.window.createTreeView('semaforoEnv.services', { treeDataProvider: servicesTree }),
+    servicesView,
+    // Com o painel aberto, confere de tempos em tempos se o que roda nos terminais bate com o painel.
+    servicesView.onDidChangeVisibility((e) => services.setPolling(e.visible)),
+    vscode.window.onDidChangeWindowState((s) => {
+      if (s.focused) void services.reconcile();
+    }),
     vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, {
       provideTextDocumentContent: (uri) => previews.get(uri.query) ?? '',
     }),
@@ -1196,6 +1487,10 @@ export function activate(ctx: vscode.ExtensionContext): void {
     cmd('semaforoEnv.allLocal', allLocal),
     cmd('semaforoEnv.organize', organize),
     cmd('semaforoEnv.groupFromSelection', groupFromSelection),
+    cmd('semaforoEnv.editGroup', editGroup),
+    cmd('semaforoEnv.newGroup', newGroup),
+    cmd('semaforoEnv.groupFromKey', groupFromKey),
+    cmd('semaforoEnv.switchGroup', switchGroup),
 
     // Reinício simples
     cmd('semaforoEnv.configureRestart', configureRestart),
@@ -1238,6 +1533,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
   );
 
   setupWatchers(ctx);
+  services.setPolling(servicesView.visible);
   void migrateRestartSettings().catch((e: unknown) => {
     console.warn(`${NAME}: não consegui migrar ${CONFIG}.restart.* para o estado do workspace.`, e);
   });

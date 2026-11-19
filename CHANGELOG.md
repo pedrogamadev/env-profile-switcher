@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0
+
+Organizar o `.env` sem precisar aprender o formato.
+
+- **Editor em tabela:** cada linha é uma opção e cada coluna é uma variável que o sistema lê. Dá para renomear opções, marcar o que é remoto, escolher a ativa, adicionar e tirar variáveis e editar valores, sempre vendo o antes e depois do `.env` antes de gravar. Os valores aparecem sem usuário e senha até você pedir os completos. Se a opção ativa mudar, os serviços que leem aquele `.env` reiniciam como numa troca normal.
+- **O painel mostra o que encontrou:** variáveis com uma linha ativa e outras comentadas aparecem em **Encontrei no seu .env**, com um clique para revisar em tabela ou a varinha para transformar todas.
+- **O `.env` se explica:** acima das variáveis com alternativas aparece **Transformar em seletor**. Nos seletores prontos aparecem **Trocar** e **Editar em tabela**. Passar o mouse num marcador mostra o que ele faz e a tabela do seletor, os marcadores ficam esmaecidos, `@danger` fica em vermelho e a opção ativa ganha a marca "← ativa".
+- Botão **+** no painel e comando **Novo seletor em tabela** para montar um seletor do zero. Ao adicionar uma variável como coluna, os valores dela que já estão no `.env` entram sozinhos na tabela.
+- Tela inicial e README reescritos começando pelo conceito (a tabela). Os marcadores viraram detalhe de "por baixo dos panos".
+
+## 0.4.3
+
+- **Corrigido:** depois de parar e subir um serviço na mão algumas vezes, o painel podia mostrar "parado" com o servidor rodando no terminal. Agora, com o painel aberto, o Semáforo confere a porta a cada poucos segundos (e ao voltar o foco pra janela): porta respondendo com um terminal na pasta do serviço vira "rodando" e passa a ser controlada pelo painel; porta fechada sem processo acompanhado vira "parado".
+- **Corrigido:** com o serviço parado, ▶ abria um terminal novo mesmo com um terminal livre na pasta dele. Agora ele reaproveita o terminal do serviço ou um terminal seu parado na mesma pasta, inclusive dividido.
+- Quando precisa abrir um terminal novo, ele abre **dividido** ao lado do outro serviço do mesmo sistema, em vez de uma aba nova.
+- Logo depois de parar um serviço pelo painel, a porta que ainda demora a fechar não faz ele "voltar" como rodando.
+- Ajustar as configurações de serviços não perde mais o estado de quem estava subindo.
+- Novo canal **Output → Semáforo Env** com o que o painel adotou, reaproveitou e marcou como parado (em *Trace*, todos os comandos que os terminais informaram). O tooltip do serviço mostra qual terminal ele acompanha.
+
 ## 0.4.2
 
 - Exemplos da documentação, do painel e dos testes passam a usar nomes genéricos de sistemas (Loja, Estoque, Pagamentos) e um IP privado de exemplo.

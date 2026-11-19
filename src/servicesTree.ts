@@ -82,7 +82,7 @@ export class ServicesTreeProvider implements vscode.TreeDataProvider<SvcNode> {
     item.iconPath = new vscode.ThemeIcon(st.icon, new vscode.ThemeColor(st.color));
     const crashInfo = r.state === 'crashed' && r.lastExitCode !== undefined ? ` (exit ${r.lastExitCode})` : '';
     item.description = `${r.def.port ? ':' + r.def.port + ' · ' : ''}${st.label}${crashInfo}`;
-    item.tooltip = `${r.id}\n${r.def.command}${r.def.cwd ? `\nem ${r.def.cwd}` : ''}`;
+    item.tooltip = `${r.id}\n${r.def.command}${r.def.cwd ? `\nem ${r.def.cwd}` : ''}${r.terminal ? `\nterminal: ${r.terminal.name}` : ''}`;
     item.contextValue = this.services.isUp(r) ? 'svcUp' : 'svcDown';
     item.command = { command: 'semaforoEnv.service.logs', title: 'Ver logs', arguments: [r.id] };
     return item;

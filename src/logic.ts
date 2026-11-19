@@ -249,3 +249,71 @@ export function localPortRefs(text: string, result: ParseResult): LocalPortRef[]
   }
   return out;
 }
+
+// ───────────────────────── Terminais dos serviços ─────────────────────────
+
+/** O que se sabe do terminal pelos eventos de shell integration. */
+export type TerminalActivity = 'idle' | 'busy' | 'unknown';
+
+export interface TerminalInfo {
+  /** Pasta atual do shell, quando a shell integration informa. */
+  cwd?: string;
+  activity: TerminalActivity;
+  /** É o terminal que o serviço já usava. */
+  home: boolean;
+  /** Outro serviço configurado usa esse terminal. */
+  ownedByOther: boolean;
+  /** É o terminal ativo no painel. */
+  active: boolean;
+  /** O comando em andamento nesse terminal é o do serviço. */
+  commandMatches: boolean;
+}
+
+/** true/false se dá pra afirmar que o terminal está na pasta do serviço; undefined se não sabemos. */
+function inServiceDir(t: TerminalInfo, serviceDir: string | undefined): boolean | undefined {
+  if (!t.cwd || !serviceDir) return undefined;
+  return normPath(t.cwd) === normPath(serviceDir);
+}
+
+/**
+ * Onde iniciar o serviço: o terminal que ele já usava ou outro livre na mesma pasta
+ * (ex.: o seu, dividido). Retorna o índice, ou -1 para abrir um terminal novo.
+ */
+export function pickStartTerminal(terms: readonly TerminalInfo[], serviceDir: string | undefined): number {
+  let best = -1;
+  let bestScore = -1;
+  terms.forEach((t, i) => {
+    if (t.activity === 'busy' || t.ownedByOther) return;
+    const same = inServiceDir(t, serviceDir);
+    if (same === false) return; // shell em outra pasta: o comando rodaria no lugar errado
+    if (same === undefined && !t.home) return; // pasta desconhecida: só confia no terminal do próprio serviço
+    const score = (t.home ? 100 : 0) + (t.activity === 'idle' ? 10 : 0) + (t.active ? 1 : 0);
+    if (score >= bestScore) {
+      best = i; // empate: o mais recente
+      bestScore = score;
+    }
+  });
+  return best;
+}
+
+/**
+ * Com a porta do serviço aberta, em qual terminal ele provavelmente está rodando.
+ * Exige um indício (estar na pasta do serviço, ou ser o terminal dele) e ignora terminais ociosos.
+ * Retorna o índice, ou -1 se nenhum convence (a porta pode ser de outro processo).
+ */
+export function pickRunningTerminal(terms: readonly TerminalInfo[], serviceDir: string | undefined): number {
+  let best = -1;
+  let bestScore = -1;
+  terms.forEach((t, i) => {
+    if (t.ownedByOther || t.activity === 'idle') return;
+    const same = inServiceDir(t, serviceDir);
+    if (same === false) return;
+    if (same === undefined && !t.home) return;
+    const score = (t.commandMatches ? 100 : 0) + (t.activity === 'busy' ? 10 : 0) + (t.home ? 5 : 0) + (t.active ? 1 : 0);
+    if (score > bestScore) {
+      best = i;
+      bestScore = score;
+    }
+  });
+  return best;
+}

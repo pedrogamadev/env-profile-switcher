@@ -2,7 +2,7 @@
   "name": "semaforo-env",
   "displayName": "Semáforo Env",
   "description": "Hub do ambiente local: troque bancos e APIs do .env com um clique, suba e reinicie o front e o back de vários sistemas num painel só, e evite rodar migration no lugar errado.",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "publisher": "arabella-dev",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -68,7 +68,7 @@
     "viewsWelcome": [
       {
         "view": "semaforoEnv.view",
-        "contents": "Nenhum grupo encontrado no .env deste projeto.\nO Semáforo pode organizar o arquivo sozinho: ele encontra as variáveis com alternativas (a ativa e as comentadas) e monta os grupos. Você vê o antes e depois antes de aplicar.\n[Organizar .env automaticamente](command:semaforoEnv.organize)\n[Escolher outro arquivo .env](command:semaforoEnv.pickFile)\n[Criar .env.example de exemplo](command:semaforoEnv.createExample)",
+        "contents": "O Semáforo transforma uma variável com vários valores (ex.: DATABASE_URL de local, teste e homolog) num seletor de um clique. Você não precisa escrever nada no .env.\nMonte o seletor numa tabela: cada linha é uma opção, cada coluna é uma variável que o sistema lê.\n[Montar seletor em tabela](command:semaforoEnv.newGroup)\nJá deixa os valores alternativos comentados no .env? O Semáforo encontra e organiza sozinho, mostrando o antes e depois.\n[Organizar .env automaticamente](command:semaforoEnv.organize)\n[Escolher outro arquivo .env](command:semaforoEnv.pickFile)",
         "when": "semaforoEnv.fileExists"
       },
       {
@@ -160,6 +160,29 @@
         "icon": "$(group-by-ref-type)"
       },
       {
+        "command": "semaforoEnv.editGroup",
+        "title": "Editar em tabela",
+        "category": "Semáforo Env",
+        "icon": "$(table)"
+      },
+      {
+        "command": "semaforoEnv.newGroup",
+        "title": "Novo seletor em tabela",
+        "category": "Semáforo Env",
+        "icon": "$(add)"
+      },
+      {
+        "command": "semaforoEnv.groupFromKey",
+        "title": "Transformar em seletor",
+        "category": "Semáforo Env",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "semaforoEnv.switchGroup",
+        "title": "Trocar opção do grupo",
+        "category": "Semáforo Env"
+      },
+      {
         "command": "semaforoEnv.configureServices",
         "title": "Detectar serviços",
         "category": "Semáforo Env",
@@ -243,6 +266,11 @@
           "group": "navigation@3"
         },
         {
+          "command": "semaforoEnv.newGroup",
+          "when": "view == semaforoEnv.view",
+          "group": "navigation@4"
+        },
+        {
           "command": "semaforoEnv.organize",
           "when": "view == semaforoEnv.view",
           "group": "1_env@1"
@@ -295,6 +323,16 @@
       ],
       "view/item/context": [
         {
+          "command": "semaforoEnv.editGroup",
+          "when": "view == semaforoEnv.view && viewItem == envGroup",
+          "group": "inline@1"
+        },
+        {
+          "command": "semaforoEnv.organize",
+          "when": "view == semaforoEnv.view && viewItem == envSuggestions",
+          "group": "inline@1"
+        },
+        {
           "command": "semaforoEnv.service.start",
           "when": "view == semaforoEnv.services && viewItem == svcDown",
           "group": "inline@1"
@@ -332,6 +370,11 @@
       ],
       "editor/context": [
         {
+          "command": "semaforoEnv.newGroup",
+          "when": "resourceFilename =~ /^\\.env/",
+          "group": "1_semaforo@3"
+        },
+        {
           "command": "semaforoEnv.groupFromSelection",
           "when": "editorHasSelection && resourceFilename =~ /^\\.env/",
           "group": "1_semaforo@1"
@@ -343,6 +386,14 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "semaforoEnv.groupFromKey",
+          "when": "false"
+        },
+        {
+          "command": "semaforoEnv.switchGroup",
+          "when": "false"
+        },
         {
           "command": "semaforoEnv.selectOption",
           "when": "false"
@@ -505,7 +556,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "test": "npm run compile && node --test out/test/parser.test.js out/test/logic.test.js out/test/organize.test.js out/test/restartCommandStore.test.js",
+    "test": "npm run compile && node --test out/test/parser.test.js out/test/logic.test.js out/test/organize.test.js out/test/restartCommandStore.test.js out/test/groupModel.test.js",
     "package": "vsce package",
     "vscode:prepublish": "npm run compile"
   },

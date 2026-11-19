@@ -3,20 +3,32 @@ import { EnvGroup, EnvOption, ParseResult, formatError } from './parser';
 
 export type Light = 'green' | 'yellow' | 'red' | 'error';
 
+/** Variáveis com alternativas que ainda não estão num grupo (detectadas pelo "Organizar .env"). */
+export interface Suggestion {
+  name: string;
+  keys: string[];
+  options: string[];
+}
+
 /** Um sistema = uma pasta do workspace com o seu .env. */
 export interface EnvView {
   key: string;
   name: string;
+  /** URI do .env (texto), para os comandos que abrem o editor em tabela. */
+  uri: string;
   fileLabel: string;
   result: ParseResult;
   light: Light;
+  suggestions: Suggestion[];
 }
 
 export type Node =
   | { type: 'system'; ctx: EnvView }
   | { type: 'group'; ctx: EnvView; group: EnvGroup }
   | { type: 'option'; ctx: EnvView; group: EnvGroup; option: EnvOption }
-  | { type: 'error'; ctx: EnvView; line: number; label: string };
+  | { type: 'error'; ctx: EnvView; line: number; label: string }
+  | { type: 'suggestions'; ctx: EnvView }
+  | { type: 'suggestion'; ctx: EnvView; suggestion: Suggestion };
 
 const LIGHT_COLOR: Record<Light, string> = {
   green: 'testing.iconPassed',
@@ -43,7 +55,9 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<Node> {
     if (ctx.result.errors.length > 0) {
       return ctx.result.errors.map((e) => ({ type: 'error' as const, ctx, line: e.line, label: formatError(e) }));
     }
-    return ctx.result.groups.map((group) => ({ type: 'group' as const, ctx, group }));
+    const nodes: Node[] = ctx.result.groups.map((group) => ({ type: 'group' as const, ctx, group }));
+    if (ctx.suggestions.length > 0) nodes.push({ type: 'suggestions', ctx });
+    return nodes;
   }
 
   getChildren(node?: Node): Node[] {
@@ -53,6 +67,9 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<Node> {
       return this.views.map((ctx) => ({ type: 'system' as const, ctx }));
     }
     if (node.type === 'system') return this.contentOf(node.ctx);
+    if (node.type === 'suggestions') {
+      return node.ctx.suggestions.map((suggestion) => ({ type: 'suggestion' as const, ctx: node.ctx, suggestion }));
+    }
     if (node.type === 'group') {
       return node.group.options.map((option) => ({ type: 'option' as const, ctx: node.ctx, group: node.group, option }));
     }
@@ -77,6 +94,33 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<Node> {
       return item;
     }
 
+    if (node.type === 'suggestions') {
+      const n = node.ctx.suggestions.length;
+      const first = node.ctx.result.groups.length === 0;
+      const item = new vscode.TreeItem(first ? 'Encontrei no seu .env' : 'Sugestões', vscode.TreeItemCollapsibleState.Expanded);
+      item.id = `suggestions:${node.ctx.key}`;
+      item.description = `${n} ${n === 1 ? 'variável' : 'variáveis'} com mais de um valor`;
+      item.iconPath = new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('editorLightBulb.foreground'));
+      item.tooltip = new vscode.MarkdownString(
+        'Variáveis com uma linha ativa e outras comentadas viram **seletores** sem você escrever nada.\n\n' +
+          'Clique numa sugestão para revisar em tabela, ou use a **varinha** para transformar todas (você vê o antes e depois).',
+      );
+      item.contextValue = 'envSuggestions';
+      return item;
+    }
+
+    if (node.type === 'suggestion') {
+      const s = node.suggestion;
+      const item = new vscode.TreeItem(s.name, vscode.TreeItemCollapsibleState.None);
+      item.id = `suggestion:${node.ctx.key}:${s.keys.join(',')}`;
+      item.description = `${s.keys.join(' + ')} · ${s.options.join(' / ')}`;
+      item.iconPath = new vscode.ThemeIcon('symbol-variable');
+      item.tooltip = `${s.keys.join(', ')} tem ${s.options.length} valores: ${s.options.join(', ')}.\nClique para revisar em tabela e transformar em seletor.`;
+      item.contextValue = 'envSuggestion';
+      item.command = { command: 'semaforoEnv.groupFromKey', title: 'Transformar em seletor', arguments: [node.ctx.uri, s.keys[0]] };
+      return item;
+    }
+
     if (node.type === 'group') {
       const { group } = node;
       const item = new vscode.TreeItem(group.name, vscode.TreeItemCollapsibleState.Expanded);
@@ -89,6 +133,7 @@ export class EnvTreeProvider implements vscode.TreeDataProvider<Node> {
       } else {
         item.iconPath = new vscode.ThemeIcon('database');
       }
+      item.tooltip ??= `${group.options.length} opções. Use o ícone de tabela para editar.`;
       return item;
     }
 

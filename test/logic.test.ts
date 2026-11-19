@@ -191,3 +191,51 @@ test('portas locais usadas pelas opções ativas', () => {
   const refs = localPortRefs(env, parseEnv(env));
   assert.deepEqual(refs.map((r) => `${r.key}:${r.port}`), ['ESTOQUE_API_URL:3034', 'DATABASE_URL:5432']);
 });
+
+import { TerminalInfo, pickRunningTerminal, pickStartTerminal } from '../src/logic';
+
+const term = (o: Partial<TerminalInfo>): TerminalInfo => ({
+  activity: 'unknown',
+  home: false,
+  ownedByOther: false,
+  active: false,
+  commandMatches: false,
+  ...o,
+});
+const API = 'C:\\proj\\loja\\loja-api';
+const APP = 'c:\\proj\\loja\\loja-app';
+
+test('iniciar reaproveita o terminal livre na pasta do serviço em vez de abrir outro', () => {
+  const terms = [
+    term({ cwd: APP, activity: 'busy' }), // front rodando
+    term({ cwd: 'c:/proj/loja/loja-api/', activity: 'idle' }), // o seu terminal dividido, parado
+  ];
+  assert.equal(pickStartTerminal(terms, API), 1);
+});
+
+test('iniciar não usa terminal ocupado, de outro serviço ou em outra pasta', () => {
+  assert.equal(pickStartTerminal([term({ cwd: API, activity: 'busy' })], API), -1);
+  assert.equal(pickStartTerminal([term({ cwd: API, activity: 'idle', ownedByOther: true })], API), -1);
+  assert.equal(pickStartTerminal([term({ cwd: APP, activity: 'idle', home: true })], API), -1);
+  assert.equal(pickStartTerminal([term({ activity: 'idle' })], API), -1); // pasta desconhecida
+});
+
+test('iniciar prefere o terminal do próprio serviço e, depois, um ocioso confirmado', () => {
+  assert.equal(pickStartTerminal([term({ cwd: API, activity: 'idle' }), term({ home: true })], API), 1);
+  assert.equal(pickStartTerminal([term({ cwd: API, activity: 'idle' }), term({ cwd: API })], API), 0);
+});
+
+test('porta aberta: acha o terminal onde o serviço está rodando', () => {
+  const terms = [
+    term({ cwd: API, activity: 'busy' }), // outro comando na mesma pasta (ex.: prisma studio)
+    term({ cwd: API, activity: 'busy', commandMatches: true }), // npm run start:dev
+  ];
+  assert.equal(pickRunningTerminal(terms, API), 1);
+  assert.equal(pickRunningTerminal([term({ cwd: API })], API), 0); // iniciado antes da extensão ativar
+});
+
+test('porta aberta sem terminal na pasta do serviço não é adotada', () => {
+  assert.equal(pickRunningTerminal([term({ cwd: APP, activity: 'busy', commandMatches: true })], API), -1);
+  assert.equal(pickRunningTerminal([term({ cwd: API, activity: 'idle' })], API), -1);
+  assert.equal(pickRunningTerminal([term({ cwd: API, activity: 'busy', ownedByOther: true })], API), -1);
+});

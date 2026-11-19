@@ -11,6 +11,7 @@
 | Antes | Com o Semáforo |
 |---|---|
 | Comentar e descomentar linhas do `.env` pra trocar de banco | Um clique na opção desejada |
+| Aprender um formato novo pra organizar o `.env` | Uma tabela: opções nas linhas, variáveis nas colunas. O Semáforo grava o resto |
 | Ctrl+C no terminal e subir o servidor de novo depois de cada troca | Os serviços que leem aquele `.env` reiniciam sozinhos |
 | Abrir 6 terminais pra testar 3 sistemas que conversam entre si | Painel **Serviços** com ▶ ■ ⟳ por serviço, por sistema ou tudo de uma vez |
 | Descobrir no log que a API local do outro sistema estava desligada | Aviso: "API do Estoque está em local, mas estoque · back está parado", com o botão **Iniciar** |
@@ -19,13 +20,40 @@
 
 ## Começando em 2 minutos
 
-1. **Organize o `.env`:** na barra lateral do Semáforo, clique em **Organizar .env automaticamente**. Ele encontra as variáveis com alternativas (a ativa e as comentadas), monta os grupos e mostra o antes e depois. Nenhum valor muda.
+1. **Monte os seletores:** abra o Semáforo na barra lateral. Se o seu `.env` já tem a mesma variável ativa e comentada (ex.: o banco local ativo e o de homolog comentado), ele mostra em **Encontrei no seu .env**: clique para revisar numa tabela e aplicar. Se não, use **Montar seletor em tabela**. Você não escreve marcador nenhum e nenhum valor muda.
 2. **Detecte os serviços:** no painel **Serviços**, clique em **Detectar serviços**. O Semáforo lê os `package.json`, identifica o que é front e o que é back e sugere o comando e a porta de cada um.
 3. **Use:** clique nas opções pra trocar de ambiente e nos botões pra subir os serviços. O resto é automático.
 
 ## Perfis do `.env`
 
-O Semáforo organiza o seu `.env` em **grupos independentes**. Exemplo: banco em `teste` e API do outro sistema em `homolog` ao mesmo tempo. Tudo fica no próprio `.env`, então Prisma, `dotenv`, `tsx` e Docker continuam lendo o arquivo normal.
+Um **seletor** é uma variável (ou um conjunto delas) com mais de um valor possível, em que você escolhe qual está valendo. Pense numa tabela:
+
+| | Opção | `DATABASE_URL` | `DIRECT_URL` |
+|:-:|---|---|---|
+| ● | local | localhost:5432/app | localhost:5432/app |
+| ○ | teste | localhost:5432/app_teste | — |
+| ○ | homolog *(remoto)* | 10.0.0.12:5432/app | 10.0.0.12:5432/app |
+
+- Cada **linha** é uma opção. Cada **coluna** é uma variável que o sistema lê.
+- Só a opção **ativa** fica descomentada no `.env`. As outras ficam guardadas como comentário, e trocar é um clique.
+- **Remoto** pede confirmação antes de ativar e deixa o semáforo vermelho.
+- Cada seletor é independente: banco em `teste` e API do outro sistema em `homolog` ao mesmo tempo.
+
+Tudo fica no próprio `.env`, então Prisma, `dotenv`, `tsx` e Docker continuam lendo o arquivo normal.
+
+### Três jeitos de criar, sem escrever marcador nenhum
+
+1. **Pelo painel:** se o `.env` já tem a mesma variável ativa e comentada, o painel mostra em **Encontrei no seu .env**. Clique numa sugestão para revisar em tabela, ou use a varinha para transformar todas de uma vez.
+2. **No próprio `.env`:** acima dessas linhas aparece **DATABASE_URL tem 3 valores · Transformar em seletor**. Nos seletores prontos aparecem **Trocar** e **Editar em tabela**, e passar o mouse num marcador mostra a tabela daquele seletor.
+3. **Do zero:** botão **+** no painel (ou **Semáforo Env: Novo seletor em tabela**). Adicione as variáveis como colunas: os valores que já estão no `.env` entram sozinhos na tabela.
+
+O editor em tabela mostra os valores sem usuário e senha (só host, porta e banco) até você pedir os valores completos, e sempre mostra o antes e depois do `.env` antes de gravar. Se a opção ativa mudar, os serviços que leem aquele `.env` reiniciam como numa troca normal.
+
+Outros atalhos: **Organizar .env automaticamente** dá nome às opções pelo endereço (`localhost` vira **local**, um host com "homolog" vira **homolog**, um IP da rede interna vira **rede-interna**...) ou por um comentário curto logo acima da linha (`#Homolog`). Também dá pra selecionar linhas no editor → botão direito → **Criar grupo com as linhas selecionadas**.
+
+### Por baixo dos panos
+
+A tabela é gravada no `.env` com quatro marcadores em comentário. Dá pra ler e editar à mão, mas você não precisa:
 
 ```env
 # @group Banco
@@ -57,13 +85,6 @@ ESTOQUE_API_URL=http://localhost:3034/api
 - Se o arquivo tiver erro de sintaxe, a extensão mostra a linha e não altera nada.
 - **Ctrl+Z** desfaz qualquer troca.
 
-### Organizar sem escrever marcador nenhum
-
-- **Organizar .env automaticamente:** o Semáforo nomeia as opções pelo endereço (`localhost` vira **local**, `*.supabase.com` vira **supabase**, um host com "homolog" vira **homolog**...) ou por um comentário curto logo acima da linha (`#Homolog`). Tudo que não aponta pra máquina local é marcado como `@danger`, e variáveis que mudam juntas (ex.: `DATABASE_URL` e `DIRECT_URL` no mesmo host) entram na mesma opção.
-- **Criar grupo com as linhas selecionadas:** selecione as linhas no editor → botão direito → **Semáforo: Criar grupo com as linhas selecionadas**.
-
-Nos dois casos, você vê um diff com o antes e depois e só aplica se aprovar.
-
 ## Serviços
 
 O painel **Serviços** mostra cada front e back com um semáforo próprio:
@@ -76,10 +97,10 @@ O painel **Serviços** mostra cada front e back com um semáforo próprio:
 | 🔴 | Caiu (o processo terminou com erro) |
 
 - **▶ ■ ⟳** por serviço, **▶** por sistema (sobe o back antes do front) e **Iniciar/Parar todos** no topo.
-- Cada serviço roda no **próprio terminal visível** (`loja · back`, `loja · front`...). Clique no serviço pra ver os logs.
+- Cada serviço roda num **terminal visível**. Ao iniciar, o Semáforo reaproveita o terminal do serviço ou um terminal seu que esteja parado na pasta dele (dividido ou não). Se precisar abrir um novo (`loja · back`, `loja · front`...), ele abre **dividido** ao lado do outro serviço do mesmo sistema. Clique no serviço pra ver os logs.
 - **Reinício certeiro:** ao trocar um `.env`, só reiniciam os serviços que rodam na pasta daquele `.env`. O front não reinicia quando você troca o banco do back.
 - **Dependências:** se uma opção ativa aponta pra `localhost:PORTA` e o serviço daquela porta está parado, o painel avisa e oferece **Iniciar**.
-- **Adota o que você já roda:** se você mesmo rodar `npm run dev` num terminal, na pasta de um serviço configurado, o painel reconhece e passa a controlar aquele terminal.
+- **Adota o que você já roda:** se você mesmo rodar `npm run dev` num terminal, na pasta de um serviço configurado, o painel reconhece e passa a controlar aquele terminal. Com o painel aberto, ele também confere a porta a cada poucos segundos: porta respondendo com um terminal na pasta do serviço vira "rodando", mesmo que o início tenha passado despercebido.
 - **Porta ocupada:** antes de iniciar, o Semáforo avisa se a porta já está em uso por outro processo.
 
 ## Vários sistemas juntos (ecossistema)
@@ -138,7 +159,7 @@ O comando escolhido fica salvo **por pasta de projeto** (a pasta do `package.jso
 
 ## Limitações conhecidas
 
-- O freio de mão e a adoção de terminais dependem da integração de shell do VS Code (ativa por padrão no PowerShell, bash e zsh), e só enxergam o terminal integrado.
+- O freio de mão e a adoção de terminais dependem da integração de shell do VS Code (ativa por padrão no PowerShell, bash e zsh), e só enxergam o terminal integrado. Pra entender por que um serviço não foi reconhecido, abra **Output → Semáforo Env** (com o nível de log em *Trace* aparecem todos os comandos que o terminal informou).
 - O reinício certeiro considera que o serviço lê o `.env` da pasta onde ele roda (o comportamento padrão do `dotenv` e do NestJS).
 - Requer VS Code 1.93 ou mais recente.
 
